@@ -6,10 +6,11 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import unittest
+import logging
 
+import ga4gh.datamodel as datamodel
 import ga4gh.frontend as frontend
 import ga4gh.protocol as protocol
-import tests.utils as utils
 
 
 class TestFrontend(unittest.TestCase):
@@ -21,48 +22,76 @@ class TestFrontend(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config = {
-            "DATA_SOURCE": "__SIMULATED__",
+            "DATA_SOURCE": "simulated://",
             "SIMULATED_BACKEND_RANDOM_SEED": 1111,
             "SIMULATED_BACKEND_NUM_CALLS": 1,
             "SIMULATED_BACKEND_VARIANT_DENSITY": 1.0,
             "SIMULATED_BACKEND_NUM_VARIANT_SETS": 1,
             # "DEBUG" : True
         }
+        frontend.reset()
         frontend.configure(
             baseConfig="TestConfig", extraConfig=config)
         cls.app = frontend.app.test_client()
+        # silence usually unhelpful CORS log
+        logging.getLogger('ga4gh.frontend.cors').setLevel(logging.CRITICAL)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.app = None
+        # example test values
+        cls.backend = frontend.app.backend
+        cls.dataRepo = cls.backend.getDataRepository()
+        cls.referenceSet = cls.dataRepo.getReferenceSets()[0]
+        cls.referenceSetId = cls.referenceSet.getId()
+        cls.reference = cls.referenceSet.getReferences()[0]
+        cls.referenceId = cls.reference.getId()
+        cls.dataset = cls.backend.getDataRepository().getDatasets()[0]
+        cls.datasetId = cls.dataset.getId()
+        cls.variantSet = cls.dataset.getVariantSets()[0]
+        cls.variantSetId = cls.variantSet.getId()
+        gaVariant = cls.variantSet.getVariants("1", 0, 2**32).next()
+        cls.variantId = gaVariant.id
+        cls.callSet = cls.variantSet.getCallSets()[0]
+        cls.callSetId = cls.callSet.getId()
+        cls.readGroupSet = cls.dataset.getReadGroupSets()[0]
+        cls.readGroupSetId = cls.readGroupSet.getId()
+        cls.readGroup = cls.readGroupSet.getReadGroups()[0]
+        cls.readGroupId = cls.readGroup.getId()
+        cls.readAlignment = cls.readGroup.getReadAlignments().next()
+        cls.readAlignmentId = cls.readAlignment.id
 
     def sendPostRequest(self, path, request):
         """
         Sends the specified GA request object and returns the response.
         """
-        versionedPath = utils.applyVersion(path)
         headers = {
             'Content-type': 'application/json',
             'Origin': self.exampleUrl,
         }
         return self.app.post(
-            versionedPath, headers=headers,
-            data=request.toJsonString())
+            path, headers=headers, data=request.toJsonString())
+
+    def sendGetRequest(self, path):
+        """
+        Sends a get request to the specified URL and returns the response.
+        """
+        headers = {
+            'Origin': self.exampleUrl,
+        }
+        return self.app.get(path, headers=headers)
 
     def sendVariantsSearch(self):
         response = self.sendVariantSetsSearch()
         variantSets = protocol.SearchVariantSetsResponse().fromJsonString(
             response.data).variantSets
         request = protocol.SearchVariantsRequest()
-        request.variantSetIds = [variantSets[0].id]
+        request.variantSetId = variantSets[0].id
         request.referenceName = "1"
         request.start = 0
         request.end = 1
         return self.sendPostRequest('/variants/search', request)
 
-    def sendVariantSetsSearch(self, datasetIds=[""]):
+    def sendVariantSetsSearch(self):
         request = protocol.SearchVariantSetsRequest()
-        request.datasetIds = datasetIds
+        request.datasetId = self.datasetId
         return self.sendPostRequest('/variantsets/search', request)
 
     def sendCallSetsSearch(self):
@@ -70,37 +99,18 @@ class TestFrontend(unittest.TestCase):
         variantSets = protocol.SearchVariantSetsResponse().fromJsonString(
             response.data).variantSets
         request = protocol.SearchCallSetsRequest()
-        request.variantSetIds = [variantSets[0].id]
+        request.variantSetId = variantSets[0].id
         return self.sendPostRequest('/callsets/search', request)
 
-    def sendReadsSearch(self, readGroupIds=None):
-        if readGroupIds is None:
-            readGroupIds = ['aReadGroupSet:one']
+    def sendReadsSearch(self, readGroupIds=None, referenceId=None):
         request = protocol.SearchReadsRequest()
         request.readGroupIds = readGroupIds
+        request.referenceId = referenceId
         return self.sendPostRequest('/reads/search', request)
 
-    def sendGetRequest(self, path):
-        versionedPath = utils.applyVersion(path)
-        headers = {
-            'Origin': self.exampleUrl,
-        }
-        response = self.app.get(versionedPath, headers=headers)
-        return response
-
-    def sendReferencesGet(self, id_=None):
-        if id_ is None:
-            id_ = 'simple:simple'
-        path = "/references/{}".format(id_)
-        response = self.sendGetRequest(path)
-        return response
-
-    def sendReferenceSetsGet(self, id_=None):
-        if id_ is None:
-            id_ = 'simple'
-        path = "/referencesets/{}".format(id_)
-        response = self.sendGetRequest(path)
-        return response
+    def sendDatasetsSearch(self):
+        request = protocol.SearchDatasetsRequest()
+        return self.sendPostRequest('/datasets/search', request)
 
     def sendReferencesSearch(self):
         path = "/references/search"
@@ -108,43 +118,109 @@ class TestFrontend(unittest.TestCase):
         response = self.sendPostRequest(path, request)
         return response
 
+    def sendGetVariant(self, id_=None):
+        if id_ is None:
+            id_ = self.variantId
+        path = "/variants/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetVariantSet(self, id_=None):
+        if id_ is None:
+            id_ = self.variantSetId
+        path = "/variantsets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetDataset(self, id_=None):
+        if id_ is None:
+            id_ = self.datasetId
+        path = "/datasets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetReadGroup(self, id_=None):
+        if id_ is None:
+            id_ = self.readGroupId
+        path = "/readgroups/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetReference(self, id_=None):
+        if id_ is None:
+            id_ = self.referenceId
+        path = "/references/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetReadGroupSet(self, id_=None):
+        if id_ is None:
+            id_ = self.readGroupSetId
+        path = "/readgroupsets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetCallset(self, id_=None):
+        if id_ is None:
+            id_ = self.callSetId
+        path = "/callsets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetReferenceSet(self, id_=None):
+        if id_ is None:
+            id_ = self.referenceSetId
+        path = "/referencesets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
     def sendListRequest(self, path, request):
-        versionedPath = utils.applyVersion(path)
         headers = {
             'Origin': self.exampleUrl,
         }
         data = request.toJsonDict()
-        response = self.app.get(
-            versionedPath, data=data, headers=headers)
+        response = self.app.get(path, data=data, headers=headers)
         return response
 
     def sendReferenceBasesList(self, id_=None):
         if id_ is None:
-            id_ = 'simple:simple'
+            id_ = self.referenceId
         path = "/references/{}/bases".format(id_)
         request = protocol.ListReferenceBasesRequest()
         response = self.sendListRequest(path, request)
         return response
 
     def test404sReturnJson(self):
-        path = utils.applyVersion('/doesNotExist')
-        response = self.app.get(path)
-        protocol.GAException.fromJsonString(response.get_data())
-        self.assertEqual(404, response.status_code)
+        paths = [
+            '/doesNotExist',
+            '/reads/sea',
+            '/variantsets/id/doesNotExist',
+        ]
+        for path in paths:
+            response = self.app.get(path)
+            protocol.GAException.fromJsonString(response.get_data())
+            self.assertEqual(404, response.status_code)
 
     def testCors(self):
         def assertHeaders(response):
             self.assertEqual(self.exampleUrl,
                              response.headers['Access-Control-Allow-Origin'])
             self.assertTrue('Content-Type' in response.headers)
-
+        # Post-based search methods
         assertHeaders(self.sendVariantsSearch())
         assertHeaders(self.sendVariantSetsSearch())
         assertHeaders(self.sendReadsSearch())
-        assertHeaders(self.sendReferencesGet())
-        assertHeaders(self.sendReferenceSetsGet())
         assertHeaders(self.sendReferencesSearch())
         assertHeaders(self.sendReferenceBasesList())
+        assertHeaders(self.sendDatasetsSearch())
+        # Get-based accessor methods
+        assertHeaders(self.sendGetVariantSet())
+        assertHeaders(self.sendGetReference())
+        assertHeaders(self.sendGetReferenceSet())
+        assertHeaders(self.sendGetReadGroupSet())
+        assertHeaders(self.sendGetReadGroup())
+        assertHeaders(self.sendGetVariant())
+        assertHeaders(self.sendGetDataset())
         # TODO: Test other methods as they are implemented
 
     def verifySearchRouting(self, path, getDefined=False):
@@ -153,43 +229,40 @@ class TestFrontend(unittest.TestCase):
         search command. If getDefined is False we check to see if it
         returns the correct status code.
         """
-        versionedPath = utils.applyVersion(path)
-        response = self.app.post(versionedPath)
+        response = self.app.post(path)
         protocol.GAException.fromJsonString(response.get_data())
         self.assertEqual(415, response.status_code)
         if not getDefined:
-            getResponse = self.app.get(versionedPath)
+            getResponse = self.app.get(path)
             protocol.GAException.fromJsonString(getResponse.get_data())
             self.assertEqual(405, getResponse.status_code)
 
         # Malformed requests should return 400
         for badJson in ["", None, "JSON", "<xml/>", "{]"]:
             badResponse = self.app.post(
-                versionedPath, data=badJson,
+                path, data=badJson,
                 headers={'Content-type': 'application/json'})
             self.assertEqual(400, badResponse.status_code)
 
         # OPTIONS should return success
-        self.assertEqual(200, self.app.options(versionedPath).status_code)
+        self.assertEqual(200, self.app.options(path).status_code)
 
     def testRouteReferences(self):
-        referenceId = "aReferenceSet:srsone"
+        referenceId = self.referenceId
         paths = ['/references/{}', '/references/{}/bases']
         for path in paths:
             path = path.format(referenceId)
-            versionedPath = utils.applyVersion(path)
-            self.assertEqual(200, self.app.get(versionedPath).status_code)
-        referenceSetId = "aReferenceSet"
+            self.assertEqual(200, self.app.get(path).status_code)
+        referenceSetId = self.referenceSetId
         paths = ['/referencesets/{}']
         for path in paths:
             path = path.format(referenceSetId)
-            versionedPath = utils.applyVersion(path)
-            self.assertEqual(200, self.app.get(versionedPath).status_code)
+            self.assertEqual(200, self.app.get(path).status_code)
         self.verifySearchRouting('/referencesets/search', True)
         self.verifySearchRouting('/references/search', True)
 
     def testRouteCallsets(self):
-        path = utils.applyVersion('/callsets/search')
+        path = '/callsets/search'
         self.assertEqual(415, self.app.post(path).status_code)
         self.assertEqual(200, self.app.options(path).status_code)
         self.assertEqual(405, self.app.get(path).status_code)
@@ -200,16 +273,11 @@ class TestFrontend(unittest.TestCase):
             self.verifySearchRouting(path)
 
     def testRouteVariants(self):
-        for path in ['/variantsets/search', '/variants/search']:
-            self.verifySearchRouting(path)
+        self.verifySearchRouting('/variantsets/search', True)
+        self.verifySearchRouting('/variants/search', False)
 
     def testRouteIndex(self):
-        self._routeIndex("/")
-
-    def testRouteIndexRedirect(self):
-        self._routeIndex("/{}".format(protocol.version))
-
-    def _routeIndex(self, path):
+        path = "/"
         response = self.app.get(path)
         self.assertEqual(200, response.status_code)
         self.assertEqual("text/html", response.mimetype)
@@ -229,6 +297,61 @@ class TestFrontend(unittest.TestCase):
             response.data)
         self.assertEqual(len(responseData.variantSets), 1)
 
+    def testGetDataset(self):
+        # Test OK: ID found
+        response = self.sendDatasetsSearch()
+        responseData = protocol.SearchDatasetsResponse.fromJsonString(
+            response.data)
+        datasetId = responseData.datasets[0].id
+        response = self.sendGetDataset(datasetId)
+        self.assertEqual(200, response.status_code)
+
+        # Test Error: 404, ID not found
+        obfuscated = datamodel.CompoundId.obfuscate("notValid")
+        compoundId = datamodel.DatasetCompoundId.parse(obfuscated)
+        response = self.sendGetDataset(str(compoundId))
+        self.assertEqual(404, response.status_code)
+
+    def testGetVariantSet(self):
+        response = self.sendVariantSetsSearch()
+        responseData = protocol.SearchVariantSetsResponse.fromJsonString(
+            response.data)
+        variantSetId = responseData.variantSets[0].id
+        response = self.sendGetVariantSet(variantSetId)
+        self.assertEqual(200, response.status_code)
+        obfuscated = datamodel.CompoundId.obfuscate("notValid:notValid")
+        compoundId = datamodel.VariantSetCompoundId.parse(obfuscated)
+        response = self.sendGetVariantSet(str(compoundId))
+        self.assertEqual(404, response.status_code)
+
+    def testGetReadGroupSet(self):
+        response = self.sendGetReadGroupSet()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.ReadGroupSet.fromJsonString(
+            response.data)
+        self.assertEqual(
+            responseData.id, self.readGroupSetId)
+
+    def testGetReadGroup(self):
+        response = self.sendGetReadGroup()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.ReadGroup.fromJsonString(
+            response.data)
+        self.assertEqual(
+            responseData.id, self.readGroupId)
+
+    def testGetCallset(self):
+        response = self.sendGetCallset()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.CallSet.fromJsonString(
+            response.data)
+        self.assertEqual(
+            responseData.id, self.callSetId)
+
+    def testGetVariant(self):
+        response = self.sendGetVariant()
+        self.assertEqual(200, response.status_code)
+
     def testCallSetsSearch(self):
         response = self.sendCallSetsSearch()
         self.assertEqual(200, response.status_code)
@@ -237,23 +360,33 @@ class TestFrontend(unittest.TestCase):
         self.assertEqual(len(responseData.callSets), 1)
 
     def testReadsSearch(self):
-        response = self.sendReadsSearch()
+        response = self.sendReadsSearch(readGroupIds=[self.readGroupId],
+                                        referenceId=self.referenceId)
         self.assertEqual(200, response.status_code)
         responseData = protocol.SearchReadsResponse.fromJsonString(
             response.data)
         self.assertEqual(len(responseData.alignments), 2)
         self.assertEqual(
             responseData.alignments[0].id,
-            "aReadGroupSet:one:simulated0")
-        self.assertEqual(
-            responseData.alignments[1].id,
-            "aReadGroupSet:one:simulated1")
+            self.readAlignmentId)
 
-    def testWrongVersion(self):
-        path = '/v0.1.2/variantsets/search'
-        self.assertEqual(404, self.app.options(path).status_code)
+    def testDatasetsSearch(self):
+        response = self.sendDatasetsSearch()
+        responseData = protocol.SearchDatasetsResponse.fromJsonString(
+            response.data)
+        datasets = list(responseData.datasets)
+        self.assertEqual(self.datasetId, datasets[0].id)
 
-    def testCurrentVersion(self):
-        path = '/{}/variantsets/search'.format(
-            frontend.Version.currentString)
-        self.assertEqual(200, self.app.options(path).status_code)
+    def testNoAuthentication(self):
+        path = '/oauth2callback'
+        self.assertEqual(501, self.app.get(path).status_code)
+
+    def testSearchUnmappedReads(self):
+        response = self.sendReadsSearch(readGroupIds=[self.readGroupId],
+                                        referenceId=None)
+        self.assertEqual(501, response.status_code)
+
+    def testSearchReadsMultipleReadGroupSets(self):
+        response = self.sendReadsSearch(readGroupIds=[self.readGroupId, "42"],
+                                        referenceId=self.referenceId)
+        self.assertEqual(501, response.status_code)

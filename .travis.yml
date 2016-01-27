@@ -1,14 +1,17 @@
 language: python
 python:
   - "2.7"
+sudo: false
 
-before_install:
-  - wget 'http://www.well.ox.ac.uk/~jk/wheelhouse.tar'
-  - tar -xvf wheelhouse.tar
+cache:
+  directories:
+    - $HOME/.cache/pip
 
 install:
-  - pip install --use-wheel --find-links=wheelhouse/ -r requirements.txt
-  - python setup.py install
+  - pip install pip --upgrade 
+  - pip install -r requirements.txt
+  - python setup.py sdist
+  - pip install dist/ga4gh*.tar.gz
 
 before_script:
   # the following two lines are to prevent travis from
@@ -20,8 +23,8 @@ before_script:
 # under it that we want to run (and want to be able to run) as local tests
 script: 
   - flake8 *.py tests ga4gh scripts --exclude=ez_setup.py
-  - coverage erase
   - nosetests --with-coverage --cover-package ga4gh
               --cover-inclusive --cover-min-percentage 85
-  - make clean -C docs/source/
-  - make -C docs/source/
+              --cover-branches --cover-erase
+  - make clean -C docs
+  - make -C docs

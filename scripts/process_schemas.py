@@ -100,6 +100,10 @@ class SchemaClass(object):
                             t0.type == "null"):
                         if isinstance(t1, avro.schema.RecordSchema):
                             ret.append((field.name, t1.name))
+                    elif (isinstance(t1, avro.schema.PrimitiveSchema) and
+                            t1.type == "null"):
+                        if isinstance(t0, avro.schema.RecordSchema):
+                            ret.append((field.name, t0.name))
                     else:
                         raise Exception("Schema union assumptions violated")
         return ret
@@ -155,10 +159,19 @@ class SchemaClass(object):
         self._writeWrappedWithIndent(slotString, outputFile, 2)
         self._writeWithIndent("]", outputFile)
         self._writeNewline(outputFile)
-        self._writeWithIndent("def __init__(self):", outputFile)
+        self._writeWithIndent("def __init__(self, **kwargs):", outputFile)
         for field in self.getFields():
-            string_ = "self.{0} = {1}".format(field.name, field.default)
+            string_ = "self.{} = kwargs.get(".format(field.name)
             self._writeWithIndent(string_, outputFile, 2)
+            string_ = "'{}', {})".format(field.name, field.default)
+            self._writeWithIndent(string_, outputFile, 3)
+            # Backtick quoted strings cause problems with Sphinx, so we
+            # strip them out here.
+            if field.doc is not None:
+                doc = field.doc.replace('`', '')
+                self._writeWithIndent('"""', outputFile, 2)
+                self._writeWrappedWithIndent(doc, outputFile, 2)
+                self._writeWithIndent('"""', outputFile, 2)
 
     def writeEmbeddedTypesClassMethods(self, outputFile):
         """
@@ -214,6 +227,9 @@ class SchemaClass(object):
         if doc is None:
             doc = "No documentation"
         self._writeWithIndent('"""', outputFile)
+        # Backtick quoted strings cause problems with Sphinx, so we
+        # strip them out here.
+        doc = doc.replace('`', '')
         self._writeWrappedWithIndent(doc, outputFile)
         self._writeWithIndent('"""', outputFile)
         if isinstance(self.schema, avro.schema.RecordSchema):
@@ -358,7 +374,7 @@ class SchemaProcessor(object):
         Downloads the specified url and saves the result to the specified
         file.
         """
-        fileDownloader = utils.FileDownloader(url, destination)
+        fileDownloader = utils.HttpFileDownloader(url, destination)
         fileDownloader.download()
 
     def convertAvro(self, avdlFile):
@@ -401,7 +417,9 @@ class SchemaProcessor(object):
         destDir = os.path.join(self.schemaDir, self.avroPath)
         if not os.path.exists(destDir):
             os.makedirs(destDir)
-        avdlFiles = glob.iglob(os.path.join(self.sourceDir, "*.avdl"))
+        avdlFiles = glob.glob(os.path.join(self.sourceDir, "*.avdl"))
+        if len(avdlFiles) <= 0:
+            raise Exception("no .avdl files found in input directory")
         for avdlFile in avdlFiles:
             if os.path.isfile(avdlFile):
                 shutil.copy2(avdlFile, destDir)

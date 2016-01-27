@@ -5,18 +5,49 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import StringIO
 import functools
 import humanize
 import itertools
 import os
 import signal
+import sys
 import time
-
-import ga4gh.protocol as protocol
-import ga4gh.client as client
 
 
 packageName = 'ga4gh'
+
+
+def captureOutput(func, *args, **kwargs):
+    """
+    Runs the specified function and arguments, and returns the
+    tuple (stdout, stderr) as strings.
+    """
+    stdout = sys.stdout
+    sys.stdout = StringIO.StringIO()
+    stderr = sys.stderr
+    sys.stderr = StringIO.StringIO()
+    try:
+        func(*args, **kwargs)
+        stdoutOutput = sys.stdout.getvalue()
+        stderrOutput = sys.stderr.getvalue()
+    finally:
+        sys.stdout.close()
+        sys.stdout = stdout
+        sys.stderr.close()
+        sys.stderr = stderr
+    return stdoutOutput, stderrOutput
+
+
+def zipLists(*lists):
+    """
+    Checks to see if all of the lists are the same length, and throws
+    an AssertionError otherwise.  Returns the zipped lists.
+    """
+    length = len(lists[0])
+    for list_ in lists[1:]:
+        assert len(list_) == length
+    return zip(*lists)
 
 
 def getLinesFromLogFile(stream):
@@ -24,6 +55,36 @@ def getLinesFromLogFile(stream):
     stream.seek(0)
     lines = stream.readlines()
     return lines
+
+
+def getProjectRootFilePath():
+    # assumes we're in a directory one level below the project root
+    return os.path.dirname(os.path.dirname(__file__))
+
+
+def getGa4ghFilePath():
+    return os.path.join(getProjectRootFilePath(), packageName)
+
+
+def powerset(iterable, maxSets=None):
+    """
+    powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+
+    See https://docs.python.org/2/library/itertools.html#recipes
+    """
+    s = list(iterable)
+    return itertools.islice(itertools.chain.from_iterable(
+        itertools.combinations(s, r) for r in range(len(s) + 1)),
+        0, maxSets)
+
+
+# ---------------- Decorators ----------------
+
+
+class TimeoutException(Exception):
+    """
+    A process has taken too long to execute
+    """
 
 
 class Timed(object):
@@ -44,30 +105,6 @@ class Timed(object):
         delta = self.end - self.start
         timeString = humanize.time.naturaldelta(delta)
         print("Finished in {} ({} seconds)".format(timeString, delta))
-
-
-def getProjectRootFilePath():
-    # assumes we're in a directory one level below the project root
-    return os.path.dirname(os.path.dirname(__file__))
-
-
-def getGa4ghFilePath():
-    return os.path.join(getProjectRootFilePath(), packageName)
-
-
-def makeHttpClient():
-    url = "http://example.com"
-    debugLevel = 0
-    workarounds = set()
-    key = "KEY"
-    httpClient = client.HttpClient(url, debugLevel, workarounds, key)
-    return httpClient
-
-
-class TimeoutException(Exception):
-    """
-    A process has taken too long to execute
-    """
 
 
 class Repeat(object):
@@ -116,19 +153,3 @@ class Timeout(object):
                 signal.alarm(0)
             return result
         return wrapper
-
-
-def applyVersion(route):
-    return "/{0}{1}".format(protocol.version, route)
-
-
-def powerset(iterable, maxSets=None):
-    """
-    powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
-
-    See https://docs.python.org/2/library/itertools.html#recipes
-    """
-    s = list(iterable)
-    return itertools.islice(itertools.chain.from_iterable(
-        itertools.combinations(s, r) for r in range(len(s) + 1)),
-        0, maxSets)

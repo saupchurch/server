@@ -185,6 +185,16 @@ class EqualityTest(SchemaTest):
         i2.variantSetIds.append("extra")
         self.assertFalse(i1 == i2)
 
+    def testKeywordInstantiation(self):
+        for cls in protocol.getProtocolClasses():
+            kwargs = {}
+            instance = self.getDefaultInstance(cls)
+            for key in instance.toJsonDict().keys():
+                val = getattr(instance, key)
+                kwargs[key] = val
+            secondInstance = cls(**kwargs)
+            self.assertEqual(instance, secondInstance)
+
 
 class SerialisationTest(SchemaTest):
     """
@@ -223,15 +233,12 @@ class ValidatorTest(SchemaTest):
             jsonDict = instance.toJsonDict()
             self.assertTrue(cls.validate(jsonDict))
 
-    @unittest.skipIf(protocol.version.startswith("0.6"), "")
     def testValidateDefaultValues(self):
         self.validateClasses(self.getDefaultInstance)
 
-    @unittest.skipIf(protocol.version.startswith("0.6"), "")
     def testValidateTypicalValues(self):
         self.validateClasses(self.getTypicalInstance)
 
-    @unittest.skipIf(protocol.version.startswith("0.6"), "")
     def testValidateRandomValues(self):
         self.validateClasses(self.getRandomInstance)
 
@@ -262,7 +269,7 @@ class GetProtocolClassesTest(SchemaTest):
     """
     def testAllClasses(self):
         classes = protocol.getProtocolClasses()
-        assert len(classes) > 0
+        self.assertGreater(len(classes), 0)
         for class_ in classes:
             self.assertTrue(issubclass(class_, protocol.ProtocolElement))
 
@@ -277,6 +284,20 @@ class GetProtocolClassesTest(SchemaTest):
             self.assertTrue(issubclass(class_, protocol.SearchResponse))
             valueListName = class_.getValueListName()
             self.assertGreater(len(valueListName), 0)
+
+
+class EmbeddedValuesTest(SchemaTest):
+    """
+    Tests for the embedded values maps in ProtocolElements.
+    """
+    def testEmbeddedValues(self):
+        for cls in protocol.getProtocolClasses():
+            for member in cls.__slots__:
+                if cls.isEmbeddedType(member):
+                    instance = cls.getEmbeddedType(member)()
+                    self.assertIsInstance(instance, protocol.ProtocolElement)
+                else:
+                    self.assertRaises(KeyError, cls.getEmbeddedType, member)
 
 
 class SearchResponseBuilderTest(SchemaTest):

@@ -21,7 +21,7 @@ def getExceptionClass(errorCode):
     """
     classMap = {}
     for name, class_ in inspect.getmembers(sys.modules[__name__]):
-        if inspect.isclass(class_) and issubclass(class_, Exception):
+        if inspect.isclass(class_) and issubclass(class_, BaseServerException):
             classMap[class_.getErrorCode()] = class_
     return classMap[errorCode]
 
@@ -68,9 +68,13 @@ class BaseServerException(Exception):
         """
         # We use the CRC32 digest of the class name as a unique code.
         # We follow the recommendation of the Python docs to ensure
-        # that this value is signed 32 bit integer.
-        code = zlib.crc32(cls.__name__) & 0xffffffff
+        # that this value is signed 32 bit integer, and then mod it
+        # to ensure non-negativity
+        code = (zlib.crc32(cls.__name__) & 0xffffffff) % 2**31
         return code
+
+    def __str__(self):
+        return self.getMessage()
 
 
 #####################################################################
@@ -122,6 +126,13 @@ class BadPageTokenException(BadRequestException):
     message = "Request page token invalid"
 
 
+class BadIdentifierException(BadRequestException):
+    def __init__(self, id_, msg=None):
+        self.message = "The identifier provided is invalid: '{}' ".format(id_)
+        if msg is not None:
+            self.message += msg
+
+
 class InvalidJsonException(BadRequestException):
     def __init__(self, jsonString):
         self.message = "Cannot parse JSON: '{}'".format(jsonString)
@@ -164,6 +175,10 @@ class PathNotFoundException(NotFoundException):
     message = "The request path was not found"
 
 
+class ConfigurationException(BaseServerException):
+    pass
+
+
 class ObjectNotFoundException(NotFoundException):
     message = "The requested object was not found"
 
@@ -174,16 +189,31 @@ class VariantSetNotFoundException(NotFoundException):
             variantSetId)
 
 
+class CallSetNotFoundException(NotFoundException):
+    def __init__(self, callSetId):
+        self.message = "The requested CallSet '{}' was not found".format(
+            callSetId)
+
+
+class DatasetNotFoundException(NotFoundException):
+    def __init__(self, datasetId):
+        self.message = "The requested dataset '{}' was not found".format(
+            datasetId)
+
+
 class ReadGroupNotFoundException(ObjectNotFoundException):
     def __init__(self, readGroupId):
         self.message = "readGroupId '{}' not found".format(readGroupId)
 
 
-class RnaQuantificationNotFoundException(NotFoundException):
-    def __init__(self, rnaQuantificationId):
-        self.message = (
-            "The requested RnaQuantification '{}' was not found".format(
-                rnaQuantificationId))
+class ReferenceSetNotFoundException(ObjectNotFoundException):
+    def __init__(self, referenceSetId):
+        self.message = "referenceSetId '{}' not found".format(referenceSetId)
+
+
+class ReferenceNotFoundException(ObjectNotFoundException):
+    def __init__(self, referenceId):
+        self.message = "referenceId '{}' not found".format(referenceId)
 
 
 class ObjectWithIdNotFoundException(ObjectNotFoundException):
@@ -197,13 +227,35 @@ class UnsupportedMediaTypeException(RuntimeException):
     message = "Unsupported media type"
 
 
-class VersionNotSupportedException(NotFoundException):
-    message = "API version not supported"
+class RangeErrorException(RuntimeException):
+    """
+    The superclass of all exceptions for which a query range error occured.
+    This raises a HTTP Error 416 "Requested Range not satisfiable".
+    """
+    httpStatus = 416
+    message = "Requested Range not satisfiable"
+
+
+class ReferenceRangeErrorException(RangeErrorException):
+    """
+    Exception raised when the client attempts to access coordinates
+    outside of the reference.
+    """
+    def __init__(self, referenceId, start, end):
+        self.message = (
+            "Query ({}, {}) outside of range for reference {}".format(
+                start, end, referenceId))
 
 
 class MethodNotAllowedException(RuntimeException):
     httpStatus = 405
     message = "Method not allowed"
+
+
+class NotAuthenticatedException(RuntimeException):
+    httpStatus = 403
+    message = (
+        "Not authenticated. Use the key on the server index page.")
 
 
 class NotImplementedException(RuntimeException):
@@ -212,8 +264,18 @@ class NotImplementedException(RuntimeException):
     """
     httpStatus = 501
 
-    def __init__(self, message):
-        self.message = message
+    def __init__(self, message=None):
+        if message is None:
+            self.message = "Path not implemented"
+        else:
+            self.message = message
+
+
+class UnmappedReadsNotSupported(NotImplementedException):
+    def __init__(self):
+        self.message = (
+            "Unmapped reads are not yet supported; "
+            "please specify a reference")
 
 
 class CallSetNotInVariantSetException(NotFoundException):
@@ -225,17 +287,56 @@ class CallSetNotInVariantSetException(NotFoundException):
             callSetId, variantSetId)
 
 
+class CallSetNameNotFoundException(NotFoundException):
+    """
+    Indicates a request was made for a callSet with a name that
+    does not exist.
+    """
+    def __init__(self, name):
+        self.message = "CallSet with name '{0}' not found".format(name)
+
+
+class ReadGroupSetNameNotFoundException(NotFoundException):
+    """
+    Indicates a request was made for a ReadGroupSet with a name that
+    does not exist.
+    """
+    def __init__(self, name):
+        self.message = "ReadGroupSet with name '{0}' not found".format(name)
+
+
+class ReferenceNameNotFoundException(NotFoundException):
+    """
+    Indicates a request was made for a Reference with a name that
+    does not exist.
+    """
+    def __init__(self, name):
+        self.message = "Reference with name '{0}' not found".format(name)
+
+
+class ReferenceSetNameNotFoundException(NotFoundException):
+    """
+    Indicates a request was made for a ReferenceSetSet with a name that
+    does not exist.
+    """
+    def __init__(self, name):
+        self.message = "ReferenceSet with name '{0}' not found".format(name)
+
+
+class DatasetNameNotFoundException(NotFoundException):
+    """
+    Indicates a request was made for a Dataset with a name that
+    does not exist.
+    """
+    def __init__(self, name):
+        self.message = "Dataset with name '{0}' not found".format(name)
+
+
 class DataException(BaseServerException):
     """
     Exceptions thrown during the server startup, and processing faulty VCFs
     """
     message = "Faulty data found or data file is missing."
-
-
-class NotExactlyOneDatasetException(DataException):
-    def __init__(self, datasetDirs):
-        msg = "Not exactly one dataset found: {}".format(datasetDirs)
-        super(NotExactlyOneDatasetException, self).__init__(msg)
 
 
 class FileOpenFailedException(DataException):
@@ -324,10 +425,78 @@ class NotExactlyOneReferenceException(MalformedException):
     """
     A FASTA file has a reference count not equal to one
     """
-    def __init__(self, id_, numReferences):
+    def __init__(self, fileName, numReferences):
         self.message = (
             "FASTA files must have one and only one reference.  "
-            "File {} has {} references.".format(id_, numReferences))
+            "File {} has {} references.".format(fileName, numReferences))
+
+
+class InconsistentReferenceNameException(MalformedException):
+    """
+    A FASTA file has a reference name not equal to its file name.
+    """
+    def __init__(self, fileName):
+        self.message = (
+            "FASTA file {} has a reference not equal to its "
+            "file name.".format(fileName))
+
+
+class MissingReferenceMetadata(MalformedException):
+    """
+    A FASTA file is missing some metadata in the corresponding JSON file.
+    """
+    def __init__(self, fileName, key):
+        self.message = (
+            "JSON reference metadata for file {} is missing key {}".format(
+                fileName, key))
+
+
+class MissingReferenceSetMetadata(MalformedException):
+    """
+    A directory containing FASTA files is missing some metadata in the
+    corresponding JSON file.
+    """
+    def __init__(self, fileName, key):
+        self.message = (
+            "JSON reference set metadata for file {} "
+            "is missing key {}".format(
+                fileName, key))
+
+
+class ReadGroupReferenceNotFound(MalformedException):
+    """
+    A BAM file contains reference names that are not in the linked
+    ReadGroupSet.
+    """
+    def __init__(self, fileName, referenceName, referenceSetName):
+        self.message = (
+            "The BAM file '{}' contains the reference '{}' which "
+            "is not present in the ReferenceSet  '{}'".format(
+                fileName, referenceName, referenceSetName))
+
+
+class MultipleReferenceSetsInReadGroupSet(MalformedException):
+    """
+    A BAM file contains reference sequences from multiple reference
+    sets.
+    """
+    def __init__(self, fileName, referenceSetName, otherReferenceSetName):
+        self.message = (
+            "The BAM file '{}' contains the referenceSets '{}' and "
+            "'{}'; at most one referenceSet per file is allowed.".format(
+                fileName, referenceSetName, otherReferenceSetName))
+
+
+class MissingDatasetMetadataException(MalformedException):
+    """
+    A directory containing datasets is missing some metadata
+    in the corresponding JSON file
+    """
+    def __init__(self, fileName, key):
+        self.message = (
+            "JSON dataset metadata for file {} "
+            "is missing key {}".format(
+                fileName, key))
 
 
 ###############################################################
@@ -356,3 +525,28 @@ class ResponseValidationFailureException(ServerError):
             "Invalid fields: {} "
             "Please file a bug report.".format(
                 jsonDict, requestClass, validator.getInvalidFields(jsonDict)))
+
+
+#####################################################################
+#
+# Client exceptions
+#
+#####################################################################
+
+
+class BaseClientException(Exception):
+    """
+    The base class for client exceptions
+    """
+
+
+class EmptyResponseException(BaseClientException):
+    """
+    The client received an empty response from the server
+    """
+
+
+class RequestNonSuccessException(BaseClientException):
+    """
+    The client received a 4xx or 5xx error code from the server
+    """

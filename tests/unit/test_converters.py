@@ -5,85 +5,101 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import mock
 import tempfile
 import unittest
 
 import pysam
 
-import ga4gh.protocol as protocol
+import ga4gh.backend as backend
+import ga4gh.client as client
 import ga4gh.converters as converters
-import tests.utils as utils
+import ga4gh.datarepo as datarepo
 
 
 class TestSamConverter(unittest.TestCase):
     """
-    Base class for SAM converter tests.
-    Provides common  methods.
+    Tests for the GA4GH reads API -> SAM conversion.
     """
-    readsFilePath = 'tests/unit/reads.dat'
+    def setUp(self):
+        self._backend = backend.Backend(
+            datarepo.FileSystemDataRepository("tests/data"))
+        self._client = client.LocalClient(self._backend)
 
-    def _getReads(self):
-        readsFile = file(self.readsFilePath)
-        lines = readsFile.readlines()
-        reads = []
-        for line in lines:
-            read = protocol.ReadAlignment.fromJsonString(line)
-            reads.append(read)
-        return reads
+    def verifySamRecordsEqual(self, sourceReads, convertedReads):
+        """
+        Verify that a read from pysam matches a read from the reference server
+        """
+        self.assertEqual(len(sourceReads), len(convertedReads))
+        for source, converted in zip(sourceReads, convertedReads):
+            self.assertEqual(source.query_name, converted.query_name)
+            self.assertEqual(source.query_sequence, converted.query_sequence)
+            self.assertEqual(source.flag, converted.flag)
+            self.assertEqual(source.reference_id, converted.reference_id)
+            self.assertEqual(
+                source.mapping_quality,
+                converted.mapping_quality)
+            self.assertEqual(
+                source.template_length,
+                converted.template_length)
+            self.assertEqual(
+                source.query_qualities, converted.query_qualities)
+            # TODO the below fields can not be tested since we don't
+            # encode them in the case that either the read is not mapped
+            # or the read pair is not mapped
+            # self.assertEqual(
+            #     source.reference_start,
+            #     converted.reference_start)
+            # self.assertEqual(source.cigar, converted.cigar)
+            # self.assertEqual(
+            #     source.next_reference_id,
+            #     converted.next_reference_id)
+            # self.assertEqual(
+            #     source.next_reference_start,
+            #     converted.next_reference_start)
+            # TODO can't uncomment until round trip tags are fixed;
+            # see schemas issue 758
+            # self.assertEqual(
+            #     source.tags,
+            #     converted.tags)
 
-    def getHttpClient(self):
-        httpClient = utils.makeHttpClient()
-        httpClient.searchReads = self.getSearchReadsResponse
-        return httpClient
-
-    def getSearchReadsRequest(self):
-        request = protocol.SearchReadsRequest()
-        return request
-
-    def getSearchReadsResponse(self, request):
-        return self._getReads()
-
-
-class TestSamConverterLogic(TestSamConverter):
-    """
-    Test the SamConverter logic
-    """
-    def testSamConverter(self):
-        mockPysam = mock.Mock()
-        with mock.patch('pysam.AlignmentFile', mockPysam):
-            httpClient = self.getHttpClient()
-            searchReadsRequest = self.getSearchReadsRequest()
-            outputFile = None
-            binaryOutput = False
-            samConverter = converters.SamConverter(
-                httpClient, searchReadsRequest, outputFile, binaryOutput)
-            samConverter.convert()
-
-
-class TestSamConverterRoundTrip(TestSamConverter):
-    """
-    Write a sam file and see if pysam can read it
-    """
-    def _testRoundTrip(self, binaryOutput):
+    def verifyFullConversion(self, readGroupSet, readGroup, reference):
+        """
+        Verify that the conversion of the specified readGroup in the
+        specified readGroupSet for the specified reference is correct.
+        This involves pulling out the reads from the original BAM file
+        and comparing these with the converted SAM records.
+        """
         with tempfile.NamedTemporaryFile() as fileHandle:
-            # write SAM file
-            httpClient = self.getHttpClient()
-            searchReadsRequest = self.getSearchReadsRequest()
-            filePath = fileHandle.name
-            samConverter = converters.SamConverter(
-                httpClient, searchReadsRequest, filePath, binaryOutput)
-            samConverter.convert()
+            converter = converters.SamConverter(
+                self._client, readGroup.getId(), reference.getId(),
+                outputFileName=fileHandle.name)
+            converter.convert()
+            samFile = pysam.AlignmentFile(fileHandle.name, "r")
+            try:
+                convertedReads = list(samFile.fetch())
+            finally:
+                samFile.close()
+            samFile = pysam.AlignmentFile(
+                readGroupSet.getSamFilePath(), "rb")
+            try:
+                sourceReads = []
+                referenceName = reference.getName().encode()
+                readGroupName = readGroup.getLocalId().encode()
+                for readAlignment in samFile.fetch(referenceName):
+                    tags = dict(readAlignment.tags)
+                    if 'RG' in tags and tags['RG'] == readGroupName:
+                        sourceReads.append(readAlignment)
+            finally:
+                samFile.close()
+            self.verifySamRecordsEqual(sourceReads, convertedReads)
 
-            # read SAM file
-            samfile = pysam.AlignmentFile(filePath, "r")
-            reads = list(samfile.fetch())
-            self.assertEqual(reads[0].query_name, "SRR622461.77861202")
-            # TODO more in-depth testing
-            samfile.close()
-
-    def testPlainText(self):
-        self._testRoundTrip(False)
-
-    def testBinary(self):
-        self._testRoundTrip(True)
+    def testSamConversion(self):
+        datasets = self._backend.getDataRepository().getDatasets()
+        for dataset in datasets:
+            readGroupSets = dataset.getReadGroupSets()
+            for readGroupSet in readGroupSets:
+                referenceSet = readGroupSet.getReferenceSet()
+                for reference in referenceSet.getReferences():
+                    for readGroup in readGroupSet.getReadGroups():
+                        self.verifyFullConversion(
+                            readGroupSet, readGroup, reference)

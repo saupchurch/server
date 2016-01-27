@@ -6,14 +6,27 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import os
 import json
 
-import ga4gh.protocol as protocol
-import ga4gh.datamodel.references as references
-import ga4gh.exceptions as exceptions
 import ga4gh.datamodel as datamodel
-import ga4gh.datamodel.datasets as datasets
+import ga4gh.exceptions as exceptions
+import ga4gh.protocol as protocol
+
+
+def _parseIntegerArgument(args, key, defaultValue):
+    """
+    Attempts to parse the specified key in the specified argument
+    dictionary into an integer. If the argument cannot be parsed,
+    raises a BadRequestIntegerException. If the key is not present,
+    return the specified default value.
+    """
+    ret = defaultValue
+    if key in args:
+        try:
+            ret = int(args[key])
+        except ValueError:
+            raise exceptions.BadRequestIntegerException(key, args[key])
+    return ret
 
 
 def _parsePageToken(pageToken, numValues):
@@ -36,139 +49,141 @@ def _parsePageToken(pageToken, numValues):
     return values
 
 
-def _getVariantSet(request, variantSetIdMap):
-    if len(request.variantSetIds) != 1:
-        if len(request.variantSetIds) == 0:
-            msg = "Variant search requires specifying a variantSet"
-        else:
-            msg = ("Variant search over multiple variantSets "
-                   "not supported")
-        raise exceptions.NotImplementedException(msg)
-    variantSetId = request.variantSetIds[0]
-    try:
-        variantSet = variantSetIdMap[variantSetId]
-    except KeyError:
-        raise exceptions.VariantSetNotFoundException(variantSetId)
-    return variantSet
-
-
 class IntervalIterator(object):
     """
     Implements generator logic for types which accept a start/end
-    range to search for the object
+    range to search for the object. Returns an iterator over
+    (object, pageToken) pairs. The pageToken is a string which allows
+    us to pick up the iteration at any point, and is None for the last
+    value in the iterator.
     """
-    def __init__(self, request, containerIdMap):
+    def __init__(self, request, parentContainer):
         self._request = request
-        self._containerIdMap = containerIdMap
-        self._badPageTokenExceptionMessage = (
-            "Inconsistent page token provided")
-        self._container = self._getContainer()
-        self._startPosition, self._equalPositionsToSkip = \
-            self._getIntervalCounters()
-        self._iterator = self._getIterator()
-        self._generator = self._internalIterator()
+        self._parentContainer = parentContainer
+        self._searchIterator = None
+        self._currentObject = None
+        self._nextObject = None
+        self._searchAnchor = None
+        self._distanceFromAnchor = None
+        if request.pageToken is None:
+            self._initialiseIteration()
+        else:
+            # Set the search start point and the number of records to skip from
+            # the page token.
+            searchAnchor, objectsToSkip = _parsePageToken(request.pageToken, 2)
+            self._pickUpIteration(searchAnchor, objectsToSkip)
 
-    def __iter__(self):
-        return self._generator
+    def _initialiseIteration(self):
+        """
+        Starts a new iteration.
+        """
+        self._searchIterator = self._search(
+            self._request.start, self._request.end)
+        self._currentObject = next(self._searchIterator, None)
+        if self._currentObject is not None:
+            self._nextObject = next(self._searchIterator, None)
+            self._searchAnchor = self._request.start
+            self._distanceFromAnchor = 0
+            firstObjectStart = self._getStart(self._currentObject)
+            if firstObjectStart > self._request.start:
+                self._searchAnchor = firstObjectStart
+
+    def _pickUpIteration(self, searchAnchor, objectsToSkip):
+        """
+        Picks up iteration from a previously provided page token. There are two
+        different phases here:
+        1) We are iterating over the initial set of intervals in which start
+        is < the search start coorindate.
+        2) We are iterating over the remaining intervals in which start >= to
+        the search start coordinate.
+        """
+        self._searchAnchor = searchAnchor
+        self._distanceFromAnchor = objectsToSkip
+        self._searchIterator = self._search(searchAnchor, self._request.end)
+        obj = next(self._searchIterator)
+        if searchAnchor == self._request.start:
+            # This is the initial set of intervals, we just skip forward
+            # objectsToSkip positions
+            for _ in range(objectsToSkip):
+                obj = next(self._searchIterator)
+        else:
+            # Now, we are past this initial set of intervals.
+            # First, we need to skip forward over the intervals where
+            # start < searchAnchor, as we've seen these already.
+            while self._getStart(obj) < searchAnchor:
+                obj = next(self._searchIterator)
+            # Now, we skip over objectsToSkip objects such that
+            # start == searchAnchor
+            for _ in range(objectsToSkip):
+                assert self._getStart(obj) == searchAnchor
+                obj = next(self._searchIterator)
+        self._currentObject = obj
+        self._nextObject = next(self._searchIterator, None)
 
     def next(self):
-        obj = next(self._generator)
-        return obj
+        """
+        Returns the next (object, nextPageToken) pair.
+        """
+        if self._currentObject is None:
+            raise StopIteration()
+        nextPageToken = None
+        if self._nextObject is not None:
+            start = self._getStart(self._nextObject)
+            # If start > the search anchor, move the search anchor. Otherwise,
+            # increment the distance from the anchor.
+            if start > self._searchAnchor:
+                self._searchAnchor = start
+                self._distanceFromAnchor = 0
+            else:
+                self._distanceFromAnchor += 1
+            nextPageToken = "{}:{}".format(
+                self._searchAnchor, self._distanceFromAnchor)
+        ret = self._currentObject, nextPageToken
+        self._currentObject = self._nextObject
+        self._nextObject = next(self._searchIterator, None)
+        return ret
 
-    def _raiseBadPageTokenException(self):
-        raise exceptions.BadPageTokenException(
-            self._badPageTokenExceptionMessage)
-
-    def _getIntervalCounters(self):
-        startPosition = self._request.start
-        equalPositionsToSkip = 0
-        if self._request.pageToken is not None:
-            startPosition, equalPositionsToSkip = _parsePageToken(
-                self._request.pageToken, 2)
-        return startPosition, equalPositionsToSkip
-
-    def _internalIterator(self):
-        obj = next(self._iterator, None)
-        if self._request.pageToken is not None:
-            # First, skip any records with getStart < startPosition
-            # or getEnd < request.start
-            while (self._getStart(obj) < self._startPosition or
-                   self._getEnd(obj) < self._request.start):
-                obj = next(self._iterator, None)
-                if obj is None:
-                    self._raiseBadPageTokenException()
-            # Now, skip equalPositionsToSkip records which have getStart
-            # == startPosition
-            equalPositionsSkipped = 0
-            while equalPositionsSkipped < self._equalPositionsToSkip:
-                if self._getStart(obj) != self._startPosition:
-                    self._raiseBadPageTokenException()
-                equalPositionsSkipped += 1
-                obj = next(self._iterator, None)
-                if obj is None:
-                    self._raiseBadPageTokenException()
-        # iterator is now positioned to start yielding valid records
-        while obj is not None:
-            nextObj = next(self._iterator, None)
-            nextPageToken = None
-            if nextObj is not None:
-                if self._getStart(obj) == self._getStart(nextObj):
-                    self._equalPositionsToSkip += 1
-                else:
-                    self._equalPositionsToSkip = 0
-                nextPageToken = "{}:{}".format(
-                    self._getStart(nextObj), self._equalPositionsToSkip)
-            yield obj, nextPageToken
-            obj = nextObj
+    def __iter__(self):
+        return self
 
 
 class ReadsIntervalIterator(IntervalIterator):
     """
     An interval iterator for reads
     """
-    def _getContainer(self):
-        if len(self._request.readGroupIds) != 1:
-            if len(self._request.readGroupIds) == 0:
-                msg = "Read search requires a readGroup to be specified"
-            else:
-                msg = "Read search over multiple readGroups not supported"
-            raise exceptions.NotImplementedException(msg)
-        readGroupId = self._request.readGroupIds[0]
-        try:
-            readGroup = self._containerIdMap[self._request.readGroupIds[0]]
-        except KeyError:
-            raise exceptions.ReadGroupNotFoundException(readGroupId)
-        return readGroup
+    def __init__(self, request, parentContainer, reference):
+        self._reference = reference
+        super(ReadsIntervalIterator, self).__init__(request, parentContainer)
 
-    def _getIterator(self):
-        iterator = self._container.getReadAlignments(
-            self._request.referenceId,
-            self._startPosition, self._request.end)
-        return iterator
+    def _search(self, start, end):
+        return self._parentContainer.getReadAlignments(
+            self._reference, start, end)
 
     @classmethod
     def _getStart(cls, readAlignment):
-        return readAlignment.alignment.position.position
+        if readAlignment.alignment is None:
+            # unmapped read with mapped mate; see SAM standard 2.4.1
+            return readAlignment.nextMatePosition.position
+        else:
+            # usual case
+            return readAlignment.alignment.position.position
 
     @classmethod
     def _getEnd(cls, readAlignment):
-        return cls._getStart(readAlignment) + \
-            len(readAlignment.alignedSequence)
+        return (
+            cls._getStart(readAlignment) +
+            len(readAlignment.alignedSequence))
 
 
 class VariantsIntervalIterator(IntervalIterator):
     """
     An interval iterator for variants
     """
-    def _getContainer(self):
-        return _getVariantSet(self._request, self._containerIdMap)
 
-    def _getIterator(self):
-        iterator = self._container.getVariants(
-            self._request.referenceName, self._startPosition,
-            self._request.end, self._request.variantName,
+    def _search(self, start, end):
+        return self._parentContainer.getVariants(
+            self._request.referenceName, start, end,
             self._request.callSetIds)
-        return iterator
 
     @classmethod
     def _getStart(cls, variant):
@@ -179,101 +194,273 @@ class VariantsIntervalIterator(IntervalIterator):
         return variant.end
 
 
-class AbstractBackend(object):
+class Backend(object):
     """
-    An abstract GA4GH backend.
+    Backend for handling the server requests.
     This class provides methods for all of the GA4GH protocol end points.
     """
-    def __init__(self):
-        self._referenceSetIdMap = {}
-        self._referenceSetIds = []
-        self._referenceIdMap = {}
-        self._referenceIds = []
+    def __init__(self, dataRepository):
         self._requestValidation = False
         self._responseValidation = False
         self._defaultPageSize = 100
         self._maxResponseLength = 2**20  # 1 MiB
-        self._dataset = datasets.AbstractDataset()
+        self._dataRepository = dataRepository
 
-    def getDataset(self):
+    def getDataRepository(self):
         """
-        Returns the backend's dataset
+        Get the data repository used by this backend
         """
-        return self._dataset
+        return self._dataRepository
 
-    def getReferenceSets(self):
+    def setRequestValidation(self, requestValidation):
         """
-        Returns the list of ReferenceSets in this backend
+        Set enabling request validation
         """
-        return list(self._referenceSetIdMap.values())
+        self._requestValidation = requestValidation
 
-    def getReference(self, id_):
+    def setResponseValidation(self, responseValidation):
         """
-        Returns a reference with the given id_
+        Set enabling response validation
         """
-        return self.runGetRequest(self._referenceIdMap, id_)
+        self._responseValidation = responseValidation
 
-    def getReferenceSet(self, id_):
+    def setDefaultPageSize(self, defaultPageSize):
         """
-        Returns a referenceSet with the given id_
+        Sets the default page size for request to the specified value.
         """
-        return self.runGetRequest(self._referenceSetIdMap, id_)
+        self._defaultPageSize = defaultPageSize
 
-    def listReferenceBases(self, id_, requestArgs):
-        # parse arguments
-        try:
-            reference = self._referenceIdMap[id_]
-        except KeyError:
-            raise exceptions.ObjectWithIdNotFoundException(id_)
-        start = 0
-        end = datamodel.PysamDatamodelMixin.fastaMax
-        if 'start' in requestArgs:
-            startString = requestArgs['start']
-            try:
-                start = int(startString)
-            except ValueError:
-                raise exceptions.BadRequestIntegerException(
-                    'start', startString)
-        if 'end' in requestArgs:
-            endString = requestArgs['end']
-            try:
-                end = int(endString)
-            except ValueError:
-                raise exceptions.BadRequestIntegerException(
-                    'end', endString)
-        if 'pageToken' in requestArgs:
-            pageTokenStr = requestArgs['pageToken']
-            start = _parsePageToken(pageTokenStr, 1)[0]
-        chunkSize = self._maxResponseLength
+    def setMaxResponseLength(self, maxResponseLength):
+        """
+        Sets the approximate maximum response length to the specified
+        value.
+        """
+        self._maxResponseLength = maxResponseLength
 
-        # get reference bases
-        gbEnd = min(start + chunkSize, end)
-        sequence = reference.getBases(start, gbEnd)
+    def startProfile(self):
+        """
+        Profiling hook. Called at the start of the runSearchRequest method
+        and allows for detailed profiling of search performance.
+        """
+        pass
 
-        # determine nextPageToken
-        if len(sequence) == chunkSize:
-            nextPageToken = start + chunkSize
-        elif len(sequence) > chunkSize:
-            raise exceptions.ServerError()  # should never happen
-        else:
+    def endProfile(self):
+        """
+        Profiling hook. Called at the end of the runSearchRequest method.
+        """
+        pass
+
+    def validateRequest(self, jsonDict, requestClass):
+        """
+        Ensures the jsonDict corresponds to a valid instance of requestClass
+        Throws an error if the data is invalid
+        """
+        if self._requestValidation:
+            if not requestClass.validate(jsonDict):
+                raise exceptions.RequestValidationFailureException(
+                    jsonDict, requestClass)
+
+    def validateResponse(self, jsonString, responseClass):
+        """
+        Ensures the jsonDict corresponds to a valid instance of responseClass
+        Throws an error if the data is invalid
+        """
+        if self._responseValidation:
+            jsonDict = json.loads(jsonString)
+            if not responseClass.validate(jsonDict):
+                raise exceptions.ResponseValidationFailureException(
+                    jsonDict, responseClass)
+
+    ###########################################################
+    #
+    # Iterators over the data hierarchy. These methods help to
+    # implement the search endpoints by providing iterators
+    # over the objects to be returned to the client.
+    #
+    ###########################################################
+
+    def _topLevelObjectGenerator(self, request, numObjects, getByIndexMethod):
+        """
+        Returns a generator over the results for the specified request, which
+        is over a set of objects of the specified size. The objects are
+        returned by call to the specified method, which must take a single
+        integer as an argument. The returned generator yields a sequence of
+        (object, nextPageToken) pairs, which allows this iteration to be picked
+        up at any point.
+        """
+        currentIndex = 0
+        if request.pageToken is not None:
+            currentIndex, = _parsePageToken(request.pageToken, 1)
+        while currentIndex < numObjects:
+            object_ = getByIndexMethod(currentIndex)
+            currentIndex += 1
             nextPageToken = None
+            if currentIndex < numObjects:
+                nextPageToken = str(currentIndex)
+            yield object_.toProtocolElement(), nextPageToken
 
-        # build response
-        response = protocol.ListReferenceBasesResponse()
-        response.offset = start
-        response.sequence = sequence
-        response.nextPageToken = nextPageToken
-        return response.toJsonString()
+    def _objectListGenerator(self, request, objectList):
+        """
+        Returns a generator over the objects in the specified list using
+        _topLevelObjectGenerator to generate page tokens.
+        """
+        return self._topLevelObjectGenerator(
+            request, len(objectList), lambda index: objectList[index])
 
-    def runGetRequest(self, idMap, id_):
+    def _singleObjectGenerator(self, datamodelObject):
         """
-        Runs a get request by indexing into the provided idMap and
-        returning a json string of that object
+        Returns a generator suitable for a search method in which the
+        result set is a single object.
         """
-        try:
-            obj = idMap[id_]
-        except KeyError:
-            raise exceptions.ObjectWithIdNotFoundException(id_)
+        yield (datamodelObject.toProtocolElement(), None)
+
+    def _noObjectGenerator(self):
+        """
+        Returns a generator yielding no results
+        """
+        return iter([])
+
+    def datasetsGenerator(self, request):
+        """
+        Returns a generator over the (dataset, nextPageToken) pairs
+        defined by the specified request
+        """
+        return self._topLevelObjectGenerator(
+            request, self.getDataRepository().getNumDatasets(),
+            self.getDataRepository().getDatasetByIndex)
+
+    def readGroupSetsGenerator(self, request):
+        """
+        Returns a generator over the (readGroupSet, nextPageToken) pairs
+        defined by the specified request.
+        """
+        dataset = self.getDataRepository().getDataset(request.datasetId)
+        if request.name is None:
+            return self._topLevelObjectGenerator(
+                request, dataset.getNumReadGroupSets(),
+                dataset.getReadGroupSetByIndex)
+        else:
+            try:
+                readGroupSet = dataset.getReadGroupSetByName(request.name)
+            except exceptions.ReadGroupSetNameNotFoundException:
+                return self._noObjectGenerator()
+            return self._singleObjectGenerator(readGroupSet)
+
+    def referenceSetsGenerator(self, request):
+        """
+        Returns a generator over the (referenceSet, nextPageToken) pairs
+        defined by the specified request.
+        """
+        results = []
+        for obj in self.getDataRepository().getReferenceSets():
+            include = True
+            if request.md5checksum is not None:
+                if request.md5checksum != obj.getMd5Checksum():
+                    include = False
+            if request.accession is not None:
+                if request.accession not in obj.getSourceAccessions():
+                    include = False
+            if request.assemblyId is not None:
+                if request.assemblyId != obj.getAssemblyId():
+                    include = False
+            if include:
+                results.append(obj)
+        return self._objectListGenerator(request, results)
+
+    def referencesGenerator(self, request):
+        """
+        Returns a generator over the (reference, nextPageToken) pairs
+        defined by the specified request.
+        """
+        referenceSet = self.getDataRepository().getReferenceSet(
+            request.referenceSetId)
+        results = []
+        for obj in referenceSet.getReferences():
+            include = True
+            if request.md5checksum is not None:
+                if request.md5checksum != obj.getMd5Checksum():
+                    include = False
+            if request.accession is not None:
+                if request.accession not in obj.getSourceAccessions():
+                    include = False
+            if include:
+                results.append(obj)
+        return self._objectListGenerator(request, results)
+
+    def variantSetsGenerator(self, request):
+        """
+        Returns a generator over the (variantSet, nextPageToken) pairs defined
+        by the specified request.
+        """
+        dataset = self.getDataRepository().getDataset(request.datasetId)
+        return self._topLevelObjectGenerator(
+            request, dataset.getNumVariantSets(),
+            dataset.getVariantSetByIndex)
+
+    def readsGenerator(self, request):
+        """
+        Returns a generator over the (read, nextPageToken) pairs defined
+        by the specified request
+        """
+        if request.referenceId is None:
+            raise exceptions.UnmappedReadsNotSupported()
+        if len(request.readGroupIds) != 1:
+            raise exceptions.NotImplementedException(
+                "Exactly one read group id must be specified")
+        compoundId = datamodel.ReadGroupCompoundId.parse(
+            request.readGroupIds[0])
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        readGroupSet = dataset.getReadGroupSet(compoundId.readGroupSetId)
+        readGroup = readGroupSet.getReadGroup(compoundId.readGroupId)
+        # Find the reference.
+        referenceSet = readGroupSet.getReferenceSet()
+        reference = referenceSet.getReference(request.referenceId)
+        intervalIterator = ReadsIntervalIterator(request, readGroup, reference)
+        return intervalIterator
+
+    def variantsGenerator(self, request):
+        """
+        Returns a generator over the (variant, nextPageToken) pairs defined
+        by the specified request.
+        """
+        compoundId = datamodel.VariantSetCompoundId.parse(request.variantSetId)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        variantSet = dataset.getVariantSet(compoundId.variantSetId)
+        intervalIterator = VariantsIntervalIterator(request, variantSet)
+        return intervalIterator
+
+    def callSetsGenerator(self, request):
+        """
+        Returns a generator over the (callSet, nextPageToken) pairs defined
+        by the specified request.
+        """
+        compoundId = datamodel.VariantSetCompoundId.parse(request.variantSetId)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        variantSet = dataset.getVariantSet(compoundId.variantSetId)
+        if request.name is None:
+            return self._topLevelObjectGenerator(
+                request, variantSet.getNumCallSets(),
+                variantSet.getCallSetByIndex)
+        else:
+            try:
+                callSet = variantSet.getCallSetByName(request.name)
+            except exceptions.CallSetNameNotFoundException:
+                return self._noObjectGenerator()
+            return self._singleObjectGenerator(callSet)
+
+    ###########################################################
+    #
+    # Public API methods. Each of these methods implements the
+    # corresponding API end point, and return data ready to be
+    # written to the wire.
+    #
+    ###########################################################
+
+    def runGetRequest(self, obj):
+        """
+        Runs a get request by converting the specified datamodel
+        object into its protocol representation.
+        """
         protocolElement = obj.toProtocolElement()
         jsonString = protocolElement.toJsonString()
         return jsonString
@@ -313,394 +500,183 @@ class AbstractBackend(object):
         self.endProfile()
         return responseString
 
-    def searchReadGroupSets(self, request):
+    def runListReferenceBases(self, id_, requestArgs):
         """
-        Returns a GASearchReadGroupSetsResponse for the specified
-        GASearchReadGroupSetsRequest object.
+        Runs a listReferenceBases request for the specified ID and
+        request arguments.
+        """
+        compoundId = datamodel.ReferenceCompoundId.parse(id_)
+        referenceSet = self.getDataRepository().getReferenceSet(
+            compoundId.referenceSetId)
+        reference = referenceSet.getReference(id_)
+        start = _parseIntegerArgument(requestArgs, 'start', 0)
+        end = _parseIntegerArgument(requestArgs, 'end', reference.getLength())
+        if 'pageToken' in requestArgs:
+            pageTokenStr = requestArgs['pageToken']
+            start = _parsePageToken(pageTokenStr, 1)[0]
+
+        chunkSize = self._maxResponseLength
+        nextPageToken = None
+        if start + chunkSize < end:
+            end = start + chunkSize
+            nextPageToken = str(start + chunkSize)
+        sequence = reference.getBases(start, end)
+
+        # build response
+        response = protocol.ListReferenceBasesResponse()
+        response.offset = start
+        response.sequence = sequence
+        response.nextPageToken = nextPageToken
+        return response.toJsonString()
+
+    # Get requests.
+
+    def runGetCallset(self, id_):
+        """
+        Returns a callset with the given id
+        """
+        compoundId = datamodel.CallSetCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        variantSet = dataset.getVariantSet(compoundId.variantSetId)
+        callSet = variantSet.getCallSet(id_)
+        return self.runGetRequest(callSet)
+
+    def runGetVariant(self, id_):
+        """
+        Returns a variant with the given id
+        """
+        compoundId = datamodel.VariantCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        variantSet = dataset.getVariantSet(compoundId.variantSetId)
+        gaVariant = variantSet.getVariant(compoundId)
+        # TODO variant is a special case here, as it's returning a
+        # protocol element rather than a datamodel object. We should
+        # fix this for consistency.
+        jsonString = gaVariant.toJsonString()
+        return jsonString
+
+    def runGetReadGroupSet(self, id_):
+        """
+        Returns a readGroupSet with the given id_
+        """
+        compoundId = datamodel.ReadGroupSetCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        readGroupSet = dataset.getReadGroupSet(id_)
+        return self.runGetRequest(readGroupSet)
+
+    def runGetReadGroup(self, id_):
+        """
+        Returns a read group with the given id_
+        """
+        compoundId = datamodel.ReadGroupCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        readGroupSet = dataset.getReadGroupSet(compoundId.readGroupSetId)
+        readGroup = readGroupSet.getReadGroup(id_)
+        return self.runGetRequest(readGroup)
+
+    def runGetReference(self, id_):
+        """
+        Runs a getReference request for the specified ID.
+        """
+        compoundId = datamodel.ReferenceCompoundId.parse(id_)
+        referenceSet = self.getDataRepository().getReferenceSet(
+            compoundId.referenceSetId)
+        reference = referenceSet.getReference(id_)
+        return self.runGetRequest(reference)
+
+    def runGetReferenceSet(self, id_):
+        """
+        Runs a getReferenceSet request for the specified ID.
+        """
+        referenceSet = self.getDataRepository().getReferenceSet(id_)
+        return self.runGetRequest(referenceSet)
+
+    def runGetVariantSet(self, id_):
+        """
+        Runs a getVariantSet request for the specified ID.
+        """
+        compoundId = datamodel.VariantSetCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.datasetId)
+        variantSet = dataset.getVariantSet(id_)
+        return self.runGetRequest(variantSet)
+
+    def runGetDataset(self, id_):
+        """
+        Runs a getDataset request for the specified ID.
+        """
+        dataset = self.getDataRepository().getDataset(id_)
+        return self.runGetRequest(dataset)
+
+    # Search requests.
+
+    def runSearchReadGroupSets(self, request):
+        """
+        Runs the specified SearchReadGroupSetsRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchReadGroupSetsRequest,
             protocol.SearchReadGroupSetsResponse,
             self.readGroupSetsGenerator)
 
-    def searchReads(self, request):
+    def runSearchReads(self, request):
         """
-        Returns a GASearchReadsResponse for the specified
-        GASearchReadsRequest object.
+        Runs the specified SearchReadsRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchReadsRequest,
             protocol.SearchReadsResponse,
             self.readsGenerator)
 
-    def searchReferenceSets(self, request):
+    def runSearchReferenceSets(self, request):
         """
-        Returns a GASearchReferenceSetsResponse for the specified
-        GASearchReferenceSetsRequest object.
+        Runs the specified SearchReferenceSetsRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchReferenceSetsRequest,
             protocol.SearchReferenceSetsResponse,
             self.referenceSetsGenerator)
 
-    def searchReferences(self, request):
+    def runSearchReferences(self, request):
         """
-        Returns a GASearchReferencesResponse for the specified
-        GASearchReferencesRequest object.
+        Runs the specified SearchReferenceRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchReferencesRequest,
             protocol.SearchReferencesResponse,
             self.referencesGenerator)
 
-    def searchVariantSets(self, request):
+    def runSearchVariantSets(self, request):
         """
-        Returns a GASearchVariantSetsResponse for the specified
-        GASearchVariantSetsRequest object.
+        Runs the specified SearchVariantSetsRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchVariantSetsRequest,
             protocol.SearchVariantSetsResponse,
             self.variantSetsGenerator)
 
-    def searchVariants(self, request):
+    def runSearchVariants(self, request):
         """
-        Returns a GASearchVariantsResponse for the specified
-        GASearchVariantsRequest object.
+        Runs the specified SearchVariantRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchVariantsRequest,
             protocol.SearchVariantsResponse,
             self.variantsGenerator)
 
-    def searchCallSets(self, request):
+    def runSearchCallSets(self, request):
         """
-        Returns a GASearchCallSetsResponse for the specified
-        GASearchCallSetsRequest Object.
+        Runs the specified SearchCallSetsRequest.
         """
         return self.runSearchRequest(
             request, protocol.SearchCallSetsRequest,
             protocol.SearchCallSetsResponse,
             self.callSetsGenerator)
 
-    def searchRnaQuantification(self, request):
+    def runSearchDatasets(self, request):
         """
-        Returns a SearchRnaQuantificationResponse for the specified
-        SearchRnaQuantificationRequest object.
-        """
-        return self.runSearchRequest(
-            request, protocol.SearchRnaQuantificationRequest,
-            protocol.SearchRnaQuantificationResponse,
-            self.rnaQuantificationGenerator)
-
-    def searchExpressionLevel(self, request):
-        """
-        Returns a SearchExpressionLevelResponse for the specified
-        SearchExpressionLevelRequest object.
+        Runs the specified SearchDatasetsRequest.
         """
         return self.runSearchRequest(
-            request, protocol.SearchExpressionLevelRequest,
-            protocol.SearchExpressionLevelResponse,
-            self.expressionLevelGenerator)
-
-    def searchFeatureGroup(self, request):
-        """
-        Returns a SearchFeatureGroupResponse for the specified
-        SearchFeatureGroupRequest object.
-        """
-        return self.runSearchRequest(
-            request, protocol.SearchFeatureGroupRequest,
-            protocol.SearchFeatureGroupResponse,
-            self.featureGroupGenerator)
-
-    # Iterators over the data hieararchy
-
-    def _topLevelObjectGenerator(self, request, idMap, idList):
-        """
-        Generalisation of the code to iterate over the objects at the top
-        of the data hierarchy.
-        """
-        currentIndex = 0
-        if request.pageToken is not None:
-            currentIndex, = _parsePageToken(request.pageToken, 1)
-        while currentIndex < len(idList):
-            objectId = idList[currentIndex]
-            object_ = idMap[objectId]
-            currentIndex += 1
-            nextPageToken = None
-            if currentIndex < len(idList):
-                nextPageToken = str(currentIndex)
-            yield object_.toProtocolElement(), nextPageToken
-
-    def readGroupSetsGenerator(self, request):
-        """
-        Returns a generator over the (readGroupSet, nextPageToken) pairs
-        defined by the specified request.
-        """
-        return self._topLevelObjectGenerator(
-            request, self.getDataset().getReadGroupSetIdMap(),
-            self.getDataset().getReadGroupSetIds())
-
-    def referenceSetsGenerator(self, request):
-        """
-        Returns a generator over the (referenceSet, nextPageToken) pairs
-        defined by the specified request.
-        """
-        return self._topLevelObjectGenerator(
-            request, self._referenceSetIdMap, self._referenceSetIds)
-
-    def referencesGenerator(self, request):
-        """
-        Returns a generator over the (reference, nextPageToken) pairs
-        defined by the specified request.
-        """
-        return self._topLevelObjectGenerator(
-            request, self._referenceIdMap, self._referenceIds)
-
-    def variantSetsGenerator(self, request):
-        """
-        Returns a generator over the (variantSet, nextPageToken) pairs defined
-        by the specified request.
-        """
-        return self._topLevelObjectGenerator(
-            request, self.getDataset().getVariantSetIdMap(),
-            self.getDataset().getVariantSetIds())
-
-    def readsGenerator(self, request):
-        """
-        Returns a generator over the (read, nextPageToken) pairs defined
-        by the specified request
-        """
-        intervalIterator = ReadsIntervalIterator(
-            request, self.getDataset().getReadGroupIdMap())
-        return intervalIterator
-
-    def variantsGenerator(self, request):
-        """
-        Returns a generator over the (variant, nextPageToken) pairs defined
-        by the specified request.
-        """
-        intervalIterator = VariantsIntervalIterator(
-            request, self.getDataset().getVariantSetIdMap())
-        return intervalIterator
-
-    def callSetsGenerator(self, request):
-        """
-        Returns a generator over the (callSet, nextPageToken) pairs defined
-        by the specified request.
-        """
-        if request.name is not None:
-            raise exceptions.NotImplementedException(
-                "Searching over names is not supported")
-        variantSet = _getVariantSet(
-            request, self.getDataset().getVariantSetIdMap())
-        return self._topLevelObjectGenerator(
-            request, variantSet.getCallSetIdMap(),
-            variantSet.getCallSetIds())
-
-    def rnaQuantificationGenerator(self, request):
-        """
-        Returns a generator over the (rnaQuantification, nextPageToken) pairs
-        defined by the specified request.
-        """
-        rnaQuantificationId = request.rnaQuantificationId
-        if rnaQuantificationId is not None:
-            if rnaQuantificationId in self.getDataset().getRnaQuantificationIds():
-                rnaQuantIds = [rnaQuantificationId]
-            else:
-                raise exceptions.RnaQuantificationNotFoundException(
-                    rnaQuantificationId)
-        else:
-            rnaQuantIds = self.getDataset().getRnaQuantificationIds()
-
-        return self._topLevelObjectGenerator(
-            request, self.getDataset().getRnaQuantificationIdMap(), rnaQuantIds)
-
-    def expressionLevelGenerator(self, request):
-        expressionLevelId = request.expressionLevelId
-        featureGroupId = request.featureGroupId
-        rnaQuantificationId = request.rnaQuantificationId
-        currentIndex = 0
-        if request.pageToken is not None:
-            currentIndex, = _parsePageToken(request.pageToken, 1)
-        if rnaQuantificationId is not None:
-            rnaQuantificationIds = [rnaQuantificationId]
-        else:
-            rnaQuantificationIds = self.getDataset().getRnaQuantificationIds()
-        rnaQuantifications = self.getDataset().getRnaQuantificationIdMap()
-        for rnaQuantId in rnaQuantificationIds:
-            rnaQuant = rnaQuantifications[rnaQuantId]
-            expressionLevelIterator = rnaQuant.getExpressionLevel(
-                expressionLevelId, featureGroupId)
-            expressionLevelData = next(expressionLevelIterator, None)
-            while (expressionLevelData is not None and
-                    currentIndex < self._defaultPageSize):
-                nextExpressionLevelData = next(expressionLevelIterator, None)
-                nextPageToken = None
-                if nextExpressionLevelData is not None:
-                    currentIndex += 1
-                    nextPageToken = "{}".format(currentIndex)
-                expressionLevel = protocol.ExpressionLevel()
-                expressionLevel.annotationId = expressionLevelData.annotationId
-                expressionLevel.expression = expressionLevelData.expression
-                expressionLevel.featureGroupId = (
-                    expressionLevelData.featureGroupId)
-                expressionLevel.id = expressionLevelData.id
-                expressionLevel.isNormalized = expressionLevelData.isNormalized
-                expressionLevel.rawReadCount = expressionLevelData.rawReadCount
-                expressionLevel.score = expressionLevelData.score
-                expressionLevel.units = expressionLevelData.units
-                yield expressionLevel, nextPageToken
-                expressionLevelData = nextExpressionLevelData
-
-    def featureGroupGenerator(self, request):
-        featureGroupId = request.featureGroupId
-        currentIndex = 0
-        if request.pageToken is not None:
-            currentIndex, = _parsePageToken(request.pageToken, 1)
-        rnaQuantifications = self.getDataset().getRnaQuantificationIdMap()
-        for rnaQuantId in self.getDataset().getRnaQuantificationIds():
-            rnaQuant = rnaQuantifications[rnaQuantId]
-            featureGroupIterator = rnaQuant.getFeatureGroup(
-                featureGroupId)
-            featureGroupData = next(featureGroupIterator, None)
-            while (featureGroupData is not None and
-                    currentIndex < self._defaultPageSize):
-                nextFeatureGroupData = next(featureGroupIterator, None)
-                nextPageToken = None
-                if nextFeatureGroupData is not None:
-                    currentIndex += 1
-                    nextPageToken = "{}".format(currentIndex)
-                featureGroup = protocol.FeatureGroup()
-                featureGroup.analysisId = featureGroupData.analysisId
-                featureGroup.created = featureGroupData.created
-                featureGroup.description = featureGroupData.description
-                featureGroup.id = featureGroupData.id
-                featureGroup.info = featureGroupData.info
-                featureGroup.name = featureGroupData.name
-                featureGroup.updated = featureGroupData.updated
-                yield featureGroup, nextPageToken
-                featureGroupData = nextFeatureGroupData
-
-    def startProfile(self):
-        """
-        Profiling hook. Called at the start of the runSearchRequest method
-        and allows for detailed profiling of search performance.
-        """
-        pass
-
-    def endProfile(self):
-        """
-        Profiling hook. Called at the end of the runSearchRequest method.
-        """
-        pass
-
-    def validateRequest(self, jsonDict, requestClass):
-        """
-        Ensures the jsonDict corresponds to a valid instance of requestClass
-        Throws an error if the data is invalid
-        """
-        if self._requestValidation:
-            if not requestClass.validate(jsonDict):
-                raise exceptions.RequestValidationFailureException(
-                    jsonDict, requestClass)
-
-    def validateResponse(self, jsonString, responseClass):
-        """
-        Ensures the jsonDict corresponds to a valid instance of responseClass
-        Throws an error if the data is invalid
-        """
-        if self._responseValidation:
-            jsonDict = json.loads(jsonString)
-            if not responseClass.validate(jsonDict):
-                raise exceptions.ResponseValidationFailureException(
-                    jsonDict, responseClass)
-
-    def setRequestValidation(self, requestValidation):
-        """
-        Set enabling request validation
-        """
-        self._requestValidation = requestValidation
-
-    def setResponseValidation(self, responseValidation):
-        """
-        Set enabling response validation
-        """
-        self._responseValidation = responseValidation
-
-    def setDefaultPageSize(self, defaultPageSize):
-        """
-        Sets the default page size for request to the specified value.
-        """
-        self._defaultPageSize = defaultPageSize
-
-    def setMaxResponseLength(self, maxResponseLength):
-        """
-        Sets the approximate maximum response length to the specified
-        value.
-        """
-        self._maxResponseLength = maxResponseLength
-
-
-class EmptyBackend(AbstractBackend):
-    """
-    A GA4GH backend that contains no data.
-    """
-
-
-class SimulatedBackend(AbstractBackend):
-    """
-    A GA4GH backend backed by no data; used mostly for testing
-    """
-    def __init__(self, randomSeed=0, numCalls=1, variantDensity=0.5,
-                 numVariantSets=1):
-        super(SimulatedBackend, self).__init__()
-        self._dataset = datasets.SimulatedDataset(
-            randomSeed, numCalls, variantDensity, numVariantSets)
-
-        # References
-        referenceSetId = "aReferenceSet"
-        referenceSet = references.SimulatedReferenceSet(referenceSetId)
-        self._referenceSetIdMap[referenceSetId] = referenceSet
-        for reference in referenceSet.getReferences():
-            referenceId = reference.getId()
-            self._referenceIdMap[referenceId] = reference
-        self._referenceSetIds = sorted(self._referenceSetIdMap.keys())
-        self._referenceIds = sorted(self._referenceIdMap.keys())
-
-
-class FileSystemBackend(AbstractBackend):
-    """
-    A GA4GH backend backed by data on the file system
-    """
-    def __init__(self, dataDir):
-        super(FileSystemBackend, self).__init__()
-        self._dataDir = dataDir
-        # TODO this code is very ugly and should be regarded as a temporary
-        # stop-gap until we deal with iterating over the data tree properly.
-
-        # References
-        referencesDirName = "references"
-        referenceSetDir = os.path.join(self._dataDir, referencesDirName)
-        for referenceSetId in os.listdir(referenceSetDir):
-            relativePath = os.path.join(referenceSetDir, referenceSetId)
-            if os.path.isdir(relativePath):
-                referenceSet = references.HtslibReferenceSet(
-                    referenceSetId, relativePath)
-                self._referenceSetIdMap[referenceSetId] = referenceSet
-                for reference in referenceSet.getReferences():
-                    referenceId = reference.getId()
-                    self._referenceIdMap[referenceId] = reference
-        self._referenceSetIds = sorted(self._referenceSetIdMap.keys())
-        self._referenceIds = sorted(self._referenceIdMap.keys())
-
-        # Datasets
-        datasetDirs = [
-            os.path.join(self._dataDir, directory)
-            for directory in os.listdir(self._dataDir)
-            if os.path.isdir(os.path.join(self._dataDir, directory)) and
-            directory != referencesDirName]
-        if len(datasetDirs) != 1:
-            raise exceptions.NotExactlyOneDatasetException(datasetDirs)
-        datasetDir = datasetDirs[0]
-        self._dataset = datasets.FileSystemDataset(datasetDir)
+            request, protocol.SearchDatasetsRequest,
+            protocol.SearchDatasetsResponse,
+            self.datasetsGenerator)

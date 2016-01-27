@@ -11,14 +11,19 @@ import collections
 import pysam
 
 import ga4gh.datamodel.reads as reads
+import ga4gh.protocol as protocol
 
 
 class AbstractConverter(object):
     """
     Abstract base class for converter classes
     """
-    def __init__(self, httpClient):
-        self._httpClient = httpClient
+    def __init__(
+            self, container, objectIterator, outputFile, binaryOutput):
+        self._container = container
+        self._objectIterator = objectIterator
+        self._outputFile = outputFile
+        self._binaryOutput = binaryOutput
 
 
 ##############################################################################
@@ -32,15 +37,19 @@ class SamException(Exception):
     """
 
 
-class SamConverter(AbstractConverter):
+class SamConverter(object):
     """
-    Converts a request to a SAM file
+    Converts a requested range from a GA4GH server into a SAM file.
     """
-    def __init__(self, httpClient, searchReadsRequest, outputFile,
-                 binaryOutput):
-        super(SamConverter, self).__init__(httpClient)
-        self._searchReadsRequest = searchReadsRequest
-        self._outputFile = outputFile
+    def __init__(
+            self, client, readGroupId=None, referenceId=None,
+            start=None, end=None, outputFileName=None, binaryOutput=False):
+        self._client = client
+        self._readGroup = self._client.getReadGroup(readGroupId)
+        self._reference = self._client.getReference(referenceId)
+        self._start = start
+        self._end = end
+        self._outputFileName = outputFileName
         self._binaryOutput = binaryOutput
 
     def convert(self):
@@ -53,26 +62,24 @@ class SamConverter(AbstractConverter):
         else:
             flags = "wh"  # h for header
         fileString = "-"
-        if self._outputFile is not None:
-            fileString = self._outputFile
-        alignmentFile = pysam.AlignmentFile(
-            fileString, flags, header=header)
-        iterator = self._httpClient.searchReads(self._searchReadsRequest)
+        if self._outputFileName is not None:
+            fileString = self._outputFileName
+        alignmentFile = pysam.AlignmentFile(fileString, flags, header=header)
+        iterator = self._client.searchReads(
+            [self._readGroup.id], self._reference.id, self._start, self._end)
         for read in iterator:
             alignedSegment = SamLine.toAlignedSegment(read, targetIds)
             alignmentFile.write(alignedSegment)
         alignmentFile.close()
 
     def _getHeader(self):
-        # TODO where to get actual values for header?
-        # need some kind of getReadGroup(readGroupId) method in protocol
-        # just add these dummy lines for now
+        # Create header information using self._reference
         header = {
             'HD': {'VN': '1.0'},
-            'SQ': [
-                {'LN': 1575, 'SN': 'chr1'},
-                {'LN': 1584, 'SN': 'chr2'},
-            ],
+            'SQ': [{
+                'LN': self._reference.length,
+                'SN': self._reference.name
+            }]
         }
         return header
 
@@ -119,19 +126,30 @@ class SamLine(object):
         # FLAG
         ret.flag = cls.toSamFlag(read)
         # RNAME
-        refName = read.alignment.position.referenceName
-        ret.reference_id = targetIds[refName]
+        if read.alignment is not None:
+            refName = read.alignment.position.referenceName
+            ret.reference_id = targetIds[refName]
         # POS
-        ret.reference_start = int(read.alignment.position.position)
+        if read.alignment is None:
+            ret.reference_start = 0
+        else:
+            ret.reference_start = int(read.alignment.position.position)
         # MAPQ
-        ret.mapping_quality = read.alignment.mappingQuality
+        if read.alignment is not None:
+            ret.mapping_quality = read.alignment.mappingQuality
         # CIGAR
         ret.cigar = cls.toCigar(read)
         # RNEXT
-        nextRefName = read.nextMatePosition.referenceName
-        ret.next_reference_id = targetIds[nextRefName]
+        if read.nextMatePosition is None:
+            ret.next_reference_id = -1
+        else:
+            nextRefName = read.nextMatePosition.referenceName
+            ret.next_reference_id = targetIds[nextRefName]
         # PNEXT
-        ret.next_reference_start = int(read.nextMatePosition.position)
+        if read.nextMatePosition is None:
+            ret.next_reference_start = -1
+        else:
+            ret.next_reference_start = int(read.nextMatePosition.position)
         # TLEN
         ret.template_length = read.fragmentLength
         # QUAL
@@ -141,40 +159,67 @@ class SamLine(object):
 
     @classmethod
     def toSamFlag(cls, read):
+        # based on algorithm here:
+        # https://github.com/googlegenomics/readthedocs/
+        # blob/master/docs/source/migrating_tips.rst
         flag = 0
-        if read.numberReads:
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.NUMBER_READS)
+        if read.numberReads == 2:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.READ_PAIRED)
         if read.properPlacement:
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.PROPER_PLACEMENT)
-        if read.readNumber:
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.READ_NUMBER_ONE)
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.READ_NUMBER_TWO)
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.READ_PROPER_PAIR)
+        if read.alignment is None:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.READ_UNMAPPED)
+        if read.nextMatePosition is None:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.MATE_UNMAPPED)
+        if (read.alignment is not None and
+                read.alignment.position.strand ==
+                protocol.Strand.NEG_STRAND):
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.READ_REVERSE_STRAND)
+        if (read.nextMatePosition is not None and
+                read.nextMatePosition.strand == protocol.Strand.NEG_STRAND):
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.MATE_REVERSE_STRAND)
+        if read.readNumber is None:
+            pass
+        elif read.readNumber == 0:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.FIRST_IN_PAIR)
+        elif read.readNumber == 1:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.SECOND_IN_PAIR)
+        else:
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.FIRST_IN_PAIR)
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.SECOND_IN_PAIR)
         if read.secondaryAlignment:
-            reads.SamFlags.setFlag(
+            flag = reads.SamFlags.setFlag(
                 flag, reads.SamFlags.SECONDARY_ALIGNMENT)
         if read.failedVendorQualityChecks:
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.FAILED_VENDOR_QUALITY_CHECKS)
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.FAILED_QUALITY_CHECK)
         if read.duplicateFragment:
-            reads.SamFlags.setFlag(
-                flag, reads.SamFlags.DUPLICATE_FRAGMENT)
+            flag = reads.SamFlags.setFlag(
+                flag, reads.SamFlags.DUPLICATE_READ)
         if read.supplementaryAlignment:
-            reads.SamFlags.setFlag(
+            flag = reads.SamFlags.setFlag(
                 flag, reads.SamFlags.SUPPLEMENTARY_ALIGNMENT)
         return flag
 
     @classmethod
     def toCigar(cls, read):
         cigarTuples = []
-        for gaCigarUnit in read.alignment.cigar:
-            operation = reads.SamCigar.ga2int(gaCigarUnit.operation)
-            length = int(gaCigarUnit.operationLength)
-            cigarTuple = (operation, length)
-            cigarTuples.append(cigarTuple)
+        if read.alignment is not None:
+            for gaCigarUnit in read.alignment.cigar:
+                operation = reads.SamCigar.ga2int(gaCigarUnit.operation)
+                length = int(gaCigarUnit.operationLength)
+                cigarTuple = (operation, length)
+                cigarTuples.append(cigarTuple)
         return tuple(cigarTuples)
 
     @classmethod
@@ -213,8 +258,32 @@ class VcfException(Exception):
 
 class VcfConverter(AbstractConverter):
     """
-    Converts a request to a VCF file
+    Converts the Variants represented by a SearchVariantsRequest into
+    VCF format using pysam.
     """
-    def __init__(self, httpClient, outputStream, searchVariantSetsRequest,
-                 searchVariantsRequest):
-        raise NotImplementedError
+    def _writeHeader(self):
+        variantSet = self._container
+        # TODO convert this into pysam types and write to the output file.
+        # For now, just print out some stuff to demonstrate how to get the
+        # attributes we have.
+        print("ID = ", variantSet.id)
+        print("Dataset ID = ", variantSet.datasetId)
+        print("Metadata = ")
+        for metadata in variantSet.metadata:
+            print("\t", metadata)
+
+    def _writeBody(self):
+        for variant in self._objectIterator:
+            # TODO convert each variant object into pysam objects and write to
+            # the output file. For now, just print the first variant and break.
+            print(variant)
+            break
+
+    def convert(self):
+        """
+        Run the conversion process.
+        """
+        # TODO allocate the pysam VCF object which can be used for the
+        # conversion process. See the convert method for ga2sam above.
+        self._writeHeader()
+        self._writeBody()

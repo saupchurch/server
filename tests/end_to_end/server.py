@@ -6,12 +6,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import logging
-import os
-import random
 import tempfile
 import shlex
-import string
 import subprocess
+import socket
 
 import requests
 
@@ -20,20 +18,26 @@ import tests.utils as utils
 
 ga4ghPort = 8001
 remotePort = 8002
+oidcOpPort = 8443
 
 
 class ServerForTesting(object):
     """
     The base class of a test server
     """
-    def __init__(self, port):
+    def __init__(self, port, protocol='http',
+                 subdirectory=None, pingStatusCode=200):
         # suppress requests package log messages
         logging.getLogger("requests").setLevel(logging.CRITICAL)
         self.port = port
+        self.subdirectory = subdirectory
+        self.pingStatusCode = pingStatusCode
         self.outFile = None
         self.errFile = None
         self.server = None
-        self.serverUrl = "http://localhost:{}".format(self.port)
+        self.serverUrl = "{}://{}:{}".format(protocol,
+                                             socket.gethostname(),
+                                             self.port)
 
     def getUrl(self):
         """
@@ -52,13 +56,15 @@ class ServerForTesting(object):
         """
         Start the server
         """
-        assert not self.isRunning(), "Another server is running"
+        assert not self.isRunning(), "Another server is running at {}".format(
+            self.serverUrl)
         self.outFile = tempfile.TemporaryFile()
         self.errFile = tempfile.TemporaryFile()
         splits = shlex.split(self.getCmdLine())
         self.server = subprocess.Popen(
             splits, stdout=self.outFile,
-            stderr=self.errFile)
+            stderr=self.errFile,
+            cwd=self.subdirectory)
         self._waitForServerStartup()
 
     def shutdown(self):
@@ -88,8 +94,8 @@ class ServerForTesting(object):
         """
         try:
             response = self.ping()
-            if response.status_code != 200:
-                msg = ("Ping of server returned non-200 status code "
+            if response.status_code != self.pingStatusCode:
+                msg = ("Ping of server returned unexpected status code "
                        "({})").format(response.status_code)
                 assert False, msg
             return True
@@ -100,7 +106,7 @@ class ServerForTesting(object):
         """
         Pings the server by doing a GET request to /
         """
-        response = requests.get(self.serverUrl)
+        response = requests.get(self.serverUrl, verify=False)
         return response
 
     def getOutLines(self):
@@ -156,16 +162,24 @@ class Ga4ghServerForTesting(ServerForTesting):
     """
     A ga4gh test server
     """
-    def __init__(self):
-        super(Ga4ghServerForTesting, self).__init__(ga4ghPort)
+    def __init__(self, useOidc=False):
+        protocol = 'https' if useOidc else 'http'
+        super(Ga4ghServerForTesting, self).__init__(ga4ghPort, protocol)
         self.configFile = None
+        self.useOidc = useOidc
 
     def getConfig(self):
         config = """
 SIMULATED_BACKEND_NUM_VARIANT_SETS = 10
 SIMULATED_BACKEND_VARIANT_DENSITY = 1
-DATA_SOURCE = "__SIMULATED__"
-DEBUG = True"""
+DATA_SOURCE = "simulated://"
+DEBUG = True
+"""
+        if self.useOidc:
+            config += """
+TESTING = True
+OIDC_PROVIDER = "https://localhost:{0}"
+""".format(oidcOpPort)
         return config
 
     def getCmdLine(self):
@@ -178,6 +192,8 @@ DEBUG = True"""
         cmdLine = """
 python server_dev.py
 --dont-use-reloader
+--disable-urllib-warnings
+--host 0.0.0.0
 --config TestConfig
 --config-file {}
 --port {} """.format(configFilePath, self.port)
@@ -210,22 +226,16 @@ DEBUG = True""".format(self.dataDir)
         return config
 
 
-class RemoteServerForTesting(ServerForTesting):
+class OidcOpServerForTesting(ServerForTesting):
     """
-    Simulates a remote server on localhost
+    Runs a test OP server on localhost
     """
-    def __init__(self, path):
-        super(RemoteServerForTesting, self).__init__(remotePort)
-        self.path = path
-        self.pidFileName = \
-            ''.join(random.sample(string.letters, 10)) + '.pid'
+    def __init__(self):
+        super(OidcOpServerForTesting, self).__init__(
+            oidcOpPort, protocol="https",
+            subdirectory="oidc-provider/simple_op",
+            pingStatusCode=404)
 
     def getCmdLine(self):
-        cmdLine = "twistd  --pidfile={} -no web -p {} --path={}".format(
-            self.pidFileName, self.port, self.path)
-        return cmdLine
-
-    def shutdown(self):
-        super(RemoteServerForTesting, self).shutdown()
-        if os.path.exists(self.pidFileName):
-            os.remove(self.pidFileName)
+        return ("python src/run.py --base https://localhost:{}" +
+                " -p {} -d settings.yaml").format(oidcOpPort, oidcOpPort)

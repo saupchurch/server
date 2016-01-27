@@ -8,205 +8,174 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
-import glob
 import unittest
 
-import pysam
-
+import ga4gh.exceptions as exceptions
 import ga4gh.backend as backend
-import ga4gh.protocol as protocol
+import ga4gh.datarepo as datarepo
+import ga4gh.datamodel.datasets as datasets
 import ga4gh.datamodel.references as references
 
 
 class TestAbstractBackend(unittest.TestCase):
     """
-    Provides testing harness for testing methods in AbstractBackend,
-    using an instance of the mock SimulatedBackend object.
+    Tests for shared functionality between backends.
     """
     def setUp(self):
-        self._backend = backend.SimulatedBackend(
-            numCalls=100, numVariantSets=10)
-        # TODO arbitrary values, pepper to taste
+        self._backend = backend.Backend(datarepo.AbstractDataRepository())
+        self._dataRepo = self._backend.getDataRepository()
 
-    def resultIterator(
-            self, request, pageSize, searchMethod, ResponseClass, listMember):
-        """
-        Returns an iterator over the list of results from the specified
-        request.  All results are returned, and paging is handled
-        automatically.
-        """
-        notDone = True
-        request.pageSize = pageSize
-        while notDone:
-            # TODO validate the response there.
-            responseStr = searchMethod(request.toJsonString())
-            response = ResponseClass.fromJsonString(responseStr)
-            objectList = getattr(response, listMember)
-            self.assertLessEqual(len(objectList), pageSize)
-            for obj in objectList:
-                yield obj
-            notDone = response.nextPageToken is not None
-            request.pageToken = response.nextPageToken
+    def testAddOneDataset(self):
+        datasetName = "ds"
+        dataset = datasets.AbstractDataset(datasetName)
+        self.assertEqual(self._dataRepo.getNumDatasets(), 0)
+        self.assertEqual(self._dataRepo.getDatasets(), [])
+        self._dataRepo.addDataset(dataset)
+        self.assertEqual(self._dataRepo.getNumDatasets(), 1)
+        self.assertEqual(self._dataRepo.getDatasets(), [dataset])
+        self.assertEqual(self._dataRepo.getDatasetByIndex(0), dataset)
+        self.assertEqual(self._dataRepo.getDatasetByName(datasetName), dataset)
+        self.assertEqual(self._dataRepo.getDataset(dataset.getId()), dataset)
 
-    def getVariantSets(self, pageSize=100):
-        """
-        Returns an iterator over the variantSets, abstracting away
-        the details of the pageSize.
-        """
-        request = protocol.SearchVariantSetsRequest()
-        return self.resultIterator(
-            request, pageSize, self._backend.searchVariantSets,
-            protocol.SearchVariantSetsResponse, "variantSets")
+    def testAddMultipleDatasets(self):
+        firstDatasetName = "ds1"
+        firstDataset = datasets.AbstractDataset(firstDatasetName)
+        secondDatasetName = "ds2"
+        secondDataset = datasets.AbstractDataset(secondDatasetName)
+        self.assertEqual(self._dataRepo.getNumDatasets(), 0)
+        self.assertEqual(self._dataRepo.getDatasets(), [])
+        self._dataRepo.addDataset(firstDataset)
+        self._dataRepo.addDataset(secondDataset)
+        self.assertEqual(self._dataRepo.getNumDatasets(), 2)
+        self.assertEqual(self._dataRepo.getDatasets(),
+                         [firstDataset, secondDataset])
+        self.assertEqual(self._dataRepo.getDatasetByIndex(0), firstDataset)
+        self.assertEqual(self._dataRepo.getDatasetByIndex(1), secondDataset)
+        self.assertEqual(self._dataRepo.getDatasetByName(firstDatasetName),
+                         firstDataset)
+        self.assertEqual(self._dataRepo.getDatasetByName(secondDatasetName),
+                         secondDataset)
+        self.assertEqual(self._dataRepo.getDataset(firstDataset.getId()),
+                         firstDataset)
+        self.assertEqual(self._dataRepo.getDataset(secondDataset.getId()),
+                         secondDataset)
 
-    def getVariants(
-            self, variantSetIds, referenceName, start=0, end=2 ** 32,
-            pageSize=100, callSetIds=None):
-        """
-        Returns an iterator over the specified list of variants,
-        abstracting out paging details.
-        """
-        request = protocol.SearchVariantsRequest()
-        request.variantSetIds = variantSetIds
-        request.referenceName = referenceName
-        request.start = start
-        request.end = end
-        request.callSetIds = callSetIds
-        return self.resultIterator(
-            request, pageSize, self._backend.searchVariants,
-            protocol.SearchVariantsResponse, "variants")
-
-    def getCallSets(self, variantSetId, pageSize=100):
-        """
-        Returns an iterator over the callsets in a specified
-        variant set.
-        """
-        request = protocol.SearchCallSetsRequest()
-        request.variantSetIds = [variantSetId]
-        return self.resultIterator(
-            request, pageSize, self._backend.searchCallSets,
-            protocol.SearchCallSetsResponse, "callSets")
-
-    def testGetVariantSets(self):
-        sortedVariantSetsFromGetter = sorted(
-            self._backend.getDataset().getVariantSets())
-        sortedVariantSetMapValues = sorted(
-            self._backend.getDataset()._variantSetIdMap.values())
+    def testAddOneReferenceSet(self):
+        referenceSetLocalId = "id"
+        referenceSet = references.AbstractReferenceSet(referenceSetLocalId)
+        self.assertEqual(self._dataRepo.getNumReferenceSets(), 0)
+        self.assertEqual(self._dataRepo.getReferenceSets(), [])
+        self._dataRepo.addReferenceSet(referenceSet)
+        self.assertEqual(self._dataRepo.getNumReferenceSets(), 1)
+        self.assertEqual(self._dataRepo.getReferenceSets(), [referenceSet])
         self.assertEqual(
-            sortedVariantSetMapValues, sortedVariantSetsFromGetter)
+            self._dataRepo.getReferenceSetByIndex(0), referenceSet)
+        self.assertEqual(
+            self._dataRepo.getReferenceSetByName(referenceSet.getLocalId()),
+            referenceSet)
+        self.assertEqual(self._dataRepo.getReferenceSet(referenceSet.getId()),
+                         referenceSet)
 
-    def testParsePageToken(self):
-        goodPageToken = "12:34:567:8:9000"
-        parsedToken = backend._parsePageToken(goodPageToken, 5)
-        self.assertEqual(parsedToken[2], 567)
+    def testAddMultipleReferenceSet(self):
+        firstRSLocalId = "id1"
+        firstRS = references.AbstractReferenceSet(firstRSLocalId)
+        secondRSLocalId = "id2"
+        secondRS = references.AbstractReferenceSet(secondRSLocalId)
+        self.assertEqual(self._dataRepo.getNumReferenceSets(), 0)
+        self.assertEqual(self._dataRepo.getReferenceSets(), [])
+        self._dataRepo.addReferenceSet(firstRS)
+        self._dataRepo.addReferenceSet(secondRS)
+        self.assertEqual(self._dataRepo.getNumReferenceSets(), 2)
+        self.assertEqual(self._dataRepo.getReferenceSets(),
+                         [firstRS, secondRS])
+        self.assertEqual(self._dataRepo.getReferenceSetByIndex(0),
+                         firstRS)
+        self.assertEqual(self._dataRepo.getReferenceSetByIndex(1),
+                         secondRS)
+        self.assertEqual(
+            self._dataRepo.getReferenceSetByName(firstRS.getLocalId()),
+            firstRS)
+        self.assertEqual(
+            self._dataRepo.getReferenceSetByName(secondRS.getLocalId()),
+            secondRS)
+        self.assertEqual(self._dataRepo.getReferenceSet(firstRS.getId()),
+                         firstRS)
+        self.assertEqual(self._dataRepo.getReferenceSet(secondRS.getId()),
+                         secondRS)
 
-    def testRunSearchRequest(self):
-        request = protocol.SearchVariantSetsRequest()
-        responseStr = self._backend.runSearchRequest(
-            request.toJsonString(), protocol.SearchVariantSetsRequest,
-            protocol.SearchVariantSetsResponse,
-            self._backend.variantSetsGenerator)
-        response = protocol.SearchVariantSetsResponse.fromJsonString(
-            responseStr)
-        self.assertTrue(
-            isinstance(response, protocol.SearchVariantSetsResponse))
+    def testGetDatasetBadId(self):
+        for badId in ["", None, "NO SUCH ID"]:
+            self.assertRaises(
+                exceptions.DatasetNotFoundException,
+                self._dataRepo.getDataset, badId)
 
-    def testRunGetRequest(self):
-        id_ = "anId"
-        obj = references.SimulatedReferenceSet(id_)
-        idMap = {id_: obj}
-        responseStr = self._backend.runGetRequest(idMap, id_)
-        class_ = protocol.ReferenceSet
-        response = class_.fromJsonString(responseStr)
-        self.assertTrue(isinstance(response, class_))
+    def testGetReferenceSetBadId(self):
+        for badId in ["", None, "NO SUCH ID"]:
+            self.assertRaises(
+                exceptions.ReferenceSetNotFoundException,
+                self._dataRepo.getReferenceSet, badId)
 
-    def testRunListReferenceBases(self):
-        id_ = "aReferenceSet:srsone"
-        self.runListReferenceBases(id_)
+    def testGetDatasetBadName(self):
+        for badName in ["", None, "NO SUCH NAME"]:
+            self.assertRaises(
+                exceptions.DatasetNameNotFoundException,
+                self._dataRepo.getDatasetByName, badName)
 
-    def testSearchVariantSets(self):
-        request = protocol.SearchVariantSetsRequest()
-        responseStr = self._backend.searchVariantSets(request.toJsonString())
-        response = protocol.SearchVariantSetsResponse.fromJsonString(
-            responseStr)
-        self.assertTrue(
-            isinstance(response, protocol.SearchVariantSetsResponse))
+    def testGetReferenceSetBadName(self):
+        for badName in ["", None, "NO SUCH NAME"]:
+            self.assertRaises(
+                exceptions.ReferenceSetNameNotFoundException,
+                self._dataRepo.getReferenceSetByName, badName)
 
-    def testSearchVariants(self):
-        variantSetIds = [
-            variantSet.id for variantSet in self.getVariantSets(pageSize=1)]
-        request = protocol.SearchVariantsRequest()
-        request.variantSetIds = variantSetIds[:1]
-        responseStr = self._backend.searchVariants(request.toJsonString())
-        response = protocol.SearchVariantsResponse.fromJsonString(
-            responseStr)
-        self.assertTrue(
-            isinstance(response, protocol.SearchVariantsResponse))
+    def testGetDatasetByIndexBadIndex(self):
+        self.assertRaises(IndexError, self._dataRepo.getDatasetByIndex, 0)
+        self.assertRaises(TypeError, self._dataRepo.getDatasetByIndex, None)
+        self.assertRaises(TypeError, self._dataRepo.getDatasetByIndex, "")
+        datasetName = "ds"
+        dataset = datasets.AbstractDataset(datasetName)
+        self._dataRepo.addDataset(dataset)
+        self.assertRaises(IndexError, self._dataRepo.getDatasetByIndex, 1)
 
-    def testSearchCallSets(self):
-        variantSetIds = [
-            variantSet.id for variantSet in self.getVariantSets(pageSize=1)]
-        request = protocol.SearchCallSetsRequest()
-        request.variantSetIds = variantSetIds[:1]
-        responseStr = self._backend.searchCallSets(request.toJsonString())
-        response = protocol.SearchCallSetsResponse.fromJsonString(
-            responseStr)
-        self.assertTrue(
-            isinstance(response, protocol.SearchCallSetsResponse))
-
-    def testVariantSetPagination(self):
-        results = []
-        for pageSize in range(1, 100):
-            variantSetIds = [
-                variantSet.id for variantSet in self.getVariantSets(
-                    pageSize=pageSize)]
-            results.append(variantSetIds)
-        for result in results[1:]:
-            self.assertEqual(result, results[0])
-
-    def runListReferenceBases(self, id_):
-        requestArgs = {"start": 5, "end": 10, "pageToken": "0"}
-        responseStr = self._backend.listReferenceBases(id_, requestArgs)
-        response = protocol.ListReferenceBasesResponse.fromJsonString(
-            responseStr)
-        self.assertTrue(
-            isinstance(response, protocol.ListReferenceBasesResponse))
+    def testGetReferenceSetByIndexBadIndex(self):
+        self.assertRaises(IndexError, self._dataRepo.getReferenceSetByIndex, 0)
+        self.assertRaises(TypeError,
+                          self._dataRepo.getReferenceSetByIndex, None)
+        self.assertRaises(TypeError, self._dataRepo.getReferenceSetByIndex, "")
+        referenceSetName = "id"
+        referenceSet = references.AbstractReferenceSet(referenceSetName)
+        self._dataRepo.addReferenceSet(referenceSet)
+        self.assertRaises(IndexError, self._dataRepo.getReferenceSetByIndex, 1)
 
 
-class TestFileSystemBackend(TestAbstractBackend):
+class TestFileSystemBackend(unittest.TestCase):
     """
     Tests proper initialization of the filesystem backend using indexed
     files in the tests/data directory.
     """
     def setUp(self):
         self._dataDir = os.path.join("tests", "data")
-        self._referencesDir = os.path.join(self._dataDir, "references")
-        self._datasetDir = os.path.join(self._dataDir, "dataset1")
-        self._variantsDir = os.path.join(self._datasetDir, "variants")
-        self._vcfs = {}
-        self._variants = []
-        self._referenceNames = set()
-        self._chromFileMap = {}
-        for relativePath in os.listdir(self._variantsDir):
-            pathToFiles = os.path.join(self._variantsDir, relativePath)
-            self._vcfs[relativePath] = []
-            for vcfFile in glob.glob(os.path.join(
-                    pathToFiles, "*.vcf.gz")):
-                self._chromFileMap[relativePath] = {}
-                self._vcfs[relativePath].append(vcfFile)
-                vcf = pysam.VariantFile(filename=vcfFile)
-                for chrom in vcf.index:
-                    self._chromFileMap[relativePath][chrom] = vcf
-        self._backend = backend.FileSystemBackend(self._dataDir)
+        self._backend = backend.Backend(
+            datarepo.FileSystemDataRepository(self._dataDir))
+        self._dataRepo = self._backend.getDataRepository()
 
-    def testVariantSetIds(self):
-        variantSets = [variantSet for variantSet in self.getVariantSets()]
-        self.assertEqual(len(variantSets), len(self._vcfs))
-        ids = set(variantSet.id for variantSet in variantSets)
-        self.assertEqual(ids, set(self._vcfs.keys()))
+    def testDatasets(self):
+        self.assertEqual(self._dataRepo.getNumDatasets(), 1)
+        dataset = self._dataRepo.getDatasetByIndex(0)
+        self.assertEqual(dataset.getLocalId(), "dataset1")
+        self.assertEqual(self._dataRepo.getDatasetByName("dataset1"), dataset)
 
-    def testRunListReferenceBases(self):
-        id_ = "example_1:simple"
-        self.runListReferenceBases(id_)
+    def testReferenceSets(self):
+        self.assertEqual(self._dataRepo.getNumReferenceSets(), 4)
+        referenceSets = enumerate(self._dataRepo.getReferenceSets())
+        referenceSetsByName = sorted(
+            referenceSets, key=lambda x: x[1].getLocalId())
+        expected_names = sorted(
+            ["Default", "NCBI37", "example_1", "example_2"])
+        for name, (index, rs) in zip(expected_names, referenceSetsByName):
+            self.assertEqual(rs.getLocalId(), name)
+            self.assertEqual(self._dataRepo.getReferenceSetByIndex(index), rs)
+            self.assertEqual(self._dataRepo.getReferenceSet(rs.getId()), rs)
+            self.assertEqual(self._dataRepo.getReferenceSetByName(name), rs)
 
 
 class TestTopLevelObjectGenerator(unittest.TestCase):
@@ -223,13 +192,12 @@ class TestTopLevelObjectGenerator(unittest.TestCase):
 
         self.request = FakeRequest()
         self.request.pageToken = None
-        self.idMap = {
-            "a": FakeTopLevelObject(),
-            "b": FakeTopLevelObject(),
-            "c": FakeTopLevelObject(),
-        }
-        self.idList = sorted(self.idMap.keys())
-        self.backend = backend.AbstractBackend()
+        self.numObjects = 3
+        self.objects = [FakeTopLevelObject() for j in range(self.numObjects)]
+        self.backend = backend.Backend(datarepo.AbstractDataRepository())
+
+    def getObjectByIndex(self, index):
+        return self.objects[index]
 
     def testPageToken(self):
         self.request.pageToken = "1"
@@ -240,6 +208,33 @@ class TestTopLevelObjectGenerator(unittest.TestCase):
 
     def _assertNumItems(self, numItems):
         iterator = self.backend._topLevelObjectGenerator(
-            self.request, self.idMap, self.idList)
+            self.request, self.numObjects, self.getObjectByIndex)
         items = list(iterator)
         self.assertEqual(len(items), numItems)
+
+
+class TestPrivateBackendMethods(unittest.TestCase):
+    """
+    keep tests of private backend methods here and not in one of the
+    subclasses of TestAbstractBackend, otherwise the tests will needlessly
+    be run more than once
+
+    (they could be put in TestAbstractBackend, but I think it's a clearer
+    separation to put them in their own test class)
+    """
+    def testParsePageToken(self):
+        goodPageToken = "12:34:567:8:9000"
+        parsedToken = backend._parsePageToken(goodPageToken, 5)
+        self.assertEqual(parsedToken[2], 567)
+
+    def testParseIntegerArgument(self):
+        good = {"one": "1", "minusone": "-1"}
+        expected = {"one": 1, "minusone": -1}
+        bad = {"string": "A", "float": "0.98"}
+        self.assertEqual(backend._parseIntegerArgument({}, "missing", 0), 0)
+        for key in good:
+            self.assertEqual(
+                backend._parseIntegerArgument(good, key, 0), expected[key])
+        for key in bad:
+            with self.assertRaises(exceptions.BadRequestIntegerException):
+                backend._parseIntegerArgument(bad, key, 0)

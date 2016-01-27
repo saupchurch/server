@@ -5,13 +5,25 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import subprocess
 import unittest
+import subprocess
 
 import server as server
 
 
-class ServerTest(unittest.TestCase):
+class ClientHelperMixin(object):
+    """
+    Helper methods involving the client for server tests
+    """
+    def runClientCmd(self, client, command, arguments=""):
+        try:
+            client.runCommand(command, arguments)
+        except subprocess.CalledProcessError as error:
+            self.server.printDebugInfo()
+            raise error
+
+
+class ServerTest(ClientHelperMixin, unittest.TestCase):
     """
     Manages server bootup and shutdown for a test
     """
@@ -39,48 +51,51 @@ class ServerTest(unittest.TestCase):
         try:
             self.server.start()
             super(ServerTest, self).run(*args, **kwargs)
-        except Exception as e:
+        except Exception as exception:
             self.server.printDebugInfo()
             self.otherExceptionHandling()
-            raise e
+            raise exception
         finally:
             self.server.shutdown()
             self.otherTeardown()
 
-    def runClientCmd(self, client, command):
-        try:
-            client.runCommand(command)
-        except subprocess.CalledProcessError as error:
-            self.server.printDebugInfo()
-            raise error
 
-
-class RemoteServerTest(ServerTest):
+class ServerTestClass(ClientHelperMixin, unittest.TestCase):
     """
-    A test that uses both the ga4gh server and a remote server
-    that serves data files
+    Like ServerTest, except starts and stops the server at the class
+    level instead of the method level.
     """
-    def otherSetup(self):
-        remoteDataDir = self.getRemoteDataDir()
-        self.remoteServer = server.RemoteServerForTesting(remoteDataDir)
-        self.remoteServer.start()
+    @classmethod
+    def setUpClass(cls):
+        cls.otherSetup()
+        cls.server = cls.getServer()
+        cls.server.start()
 
-    def otherTeardown(self):
-        self.remoteServer.shutdown()
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.otherTeardown()
 
-    def otherExceptionHandling(self):
-        self.remoteServer.printDebugInfo()
+    @classmethod
+    def otherSetup(cls):
+        pass
 
-    def getRemoteDataDir(self):
-        raise NotImplementedError("Must subclass RemoteServerTest")
+    @classmethod
+    def otherTeardown(cls):
+        pass
 
-    def getServer(self):
-        raise NotImplementedError("Must subclass RemoteServerTest")
+    @classmethod
+    def otherExceptionHandling(cls):
+        pass
 
-    def runClientCmd(self, client, command):
+    @classmethod
+    def getServer(cls):
+        return server.Ga4ghServerForTesting()
+
+    def run(self, *args, **kwargs):
         try:
-            client.runCommand(command)
-        except subprocess.CalledProcessError as error:
+            super(ServerTestClass, self).run(*args, **kwargs)
+        except Exception as exception:
             self.server.printDebugInfo()
-            self.remoteServer.printDebugInfo()
-            raise error
+            self.otherExceptionHandling()
+            raise exception

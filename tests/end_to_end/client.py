@@ -9,7 +9,6 @@ import shlex
 import subprocess
 import tempfile
 
-import ga4gh.protocol as protocol
 import tests.utils as utils
 
 
@@ -22,11 +21,11 @@ class ClientForTesting(object):
         self.outFile = None
         self.errFile = None
         if flags is None:
-            self.flags = "-v -O"
+            self.flags = "-vv"
         else:
-            self.flags = None
-        self.cmdLine = ("python client_dev.py {flags} {command} "
-                        "{serverUrl}/v{protocolVersion}")
+            self.flags = flags
+        self.cmdLine = (
+            "python client_dev.py {flags} {command} {serverUrl} {arguments}")
         self._createLogFiles()
 
     def _createLogFiles(self):
@@ -43,12 +42,12 @@ class ClientForTesting(object):
     def getErrLines(self):
         return utils.getLinesFromLogFile(self.errFile)
 
-    def runCommand(self, command):
+    def runCommand(self, command, arguments, debugOnFail=True):
         clientCmdLine = self.cmdLine.format(**{
             "flags": self.flags,
             "command": command,
             "serverUrl": self.serverUrl,
-            "protocolVersion": protocol.version, })
+            "arguments": arguments})
         splits = shlex.split(clientCmdLine)
         try:
             subprocess.check_call(
@@ -56,7 +55,8 @@ class ClientForTesting(object):
                 stdout=self.outFile,
                 stderr=self.errFile)
         except subprocess.CalledProcessError as error:
-            self.printDebugInfo(command)
+            if debugOnFail:
+                self.printDebugInfo(command)
             raise error
 
     def printDebugInfo(self, command):

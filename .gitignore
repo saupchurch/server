@@ -2,11 +2,13 @@
 *.swp
 *.swo
 ga4gh-example-data*
+ga4gh-downloaded-data*
 scripts/auth.yml
 *.fa
 *.pid
 *.fai
 *.gzi
+*.bak
 
 # Below based off of https://gist.github.com/octocat/9257657
 # and https://github.com/github/gitignore/blob/master/Python.gitignore
@@ -99,7 +101,7 @@ coverage.xml
 *.log
 
 # Sphinx documentation
-docs/source/_build/
+docs/_build/
 
 # PyBuilder
 target/
@@ -110,3 +112,7 @@ target/
 
 # Pycharm
 .idea/
+*.iml
+
+# Unused parts of the OIDC provider
+oidc-provider/simple_op/src/provider/server/static/jwks.json

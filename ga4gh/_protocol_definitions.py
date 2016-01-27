@@ -11,238 +11,31 @@ from protocol import SearchResponse
 
 import avro.schema
 
-version = '0.6.e6d6074'
-
-
-class AlleleResource(ProtocolElement):
-    """
-Frequencies of alleles
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"AlleleResource", "fields": [{"doc": "", "type": "string", "name":
-"allele"}, {"doc": "", "type": "double", "name": "frequency"}], "doc":
-""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "allele",
-        "frequency",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['allele', 'frequency']
-
-    def __init__(self):
-        self.allele = None
-        self.frequency = None
-
-
-class Analysis(ProtocolElement):
-    """
-An analysis contains an interpretation of one or several experiments.
-(e.g. SNVs, copy number variations, methylation status) together with
-information about the methodology used.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.models", "type": "record", "name":
-"Analysis", "fields": [{"doc": "", "type": "string", "name": "id"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "description"}, {"default": null, "doc": "", "type": ["null",
-"long"], "name": "created"}, {"default": null, "doc": "", "type":
-["null", "long"], "name": "updated"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "type"}, {"default": null, "doc":
-"", "type": {"items": "string", "type": "array"}, "name": "software"},
-{"default": {}, "doc": "", "type": {"values": {"items": "string",
-"type": "array"}, "type": "map"}, "name": "info"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['created', 'description', 'id', 'info', 'name', 'software',
-                 'type', 'updated']
-
-    def __init__(self):
-        self.created = None
-        self.description = None
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.software = None
-        self.type = None
-        self.updated = None
-
-
-class BeaconInformationResource(ProtocolElement):
-    """
-BeaconInformationResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"BeaconInformationResource", "fields": [{"doc": "", "type": "string",
-"name": "id"}, {"doc": "", "type": "string", "name": "organization"},
-{"doc": "", "type": "string", "name": "description"}, {"default": [],
-"doc": "", "type": {"items": {"doc": "", "type": "record", "name":
-"DataSetResource", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"doc": "", "type": "string", "name": "reference"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"},
-{"default": null, "doc": "", "type": ["null", {"doc": "", "type":
-"record", "name": "DataSizeResource", "fields": [{"doc": "", "type":
-"int", "name": "variants"}, {"doc": "", "type": "int", "name":
-"samples"}]}], "name": "size"}, {"doc": "", "type": "boolean", "name":
-"multiple"}, {"default": [], "doc": "", "type": {"items": "string",
-"type": "array"}, "name": "datasets"}, {"default": [], "doc": "",
-"type": {"items": {"doc": "", "type": "record", "name":
-"DataUseResource", "fields": [{"doc": "", "type": "string", "name":
-"category"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "description"}, {"default": [], "doc": "", "type": {"items":
-{"doc": "", "type": "record", "name": "DataUseRequirementResource",
-"fields": [{"doc": "", "type": "string", "name": "name"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"}]},
-"type": "array"}, "name": "requirements"}]}, "type": "array"}, "name":
-"data_use"}]}, "type": "array"}, "name": "datasets"}, {"doc": "",
-"type": "string", "name": "api"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "homepage"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "email"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "auth"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "queries"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "api",
-        "description",
-        "id",
-        "organization",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'datasets': DataSetResource,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'datasets': DataSetResource,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['api', 'auth', 'datasets', 'description', 'email', 'homepage',
-                 'id', 'organization', 'queries']
-
-    def __init__(self):
-        self.api = None
-        self.auth = None
-        self.datasets = []
-        self.description = None
-        self.email = None
-        self.homepage = None
-        self.id = None
-        self.organization = None
-        self.queries = None
-
-
-class BeaconResponseResource(ProtocolElement):
-    """
-The response from the Beacon
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"BeaconResponseResource", "fields": [{"doc": "", "type": "string",
-"name": "beacon"}, {"doc": "", "type": {"doc": "", "type": "record",
-"name": "QueryResource", "fields": [{"doc": "", "type": "string",
-"name": "allele"}, {"doc": "", "type": "string", "name":
-"chromosome"}, {"doc": "", "type": "long", "name": "position"},
-{"doc": "", "type": "string", "name": "reference"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "dataset"}]}, "name":
-"query"}, {"doc": "", "type": {"doc": "", "type": "record", "name":
-"ResponseResource", "fields": [{"doc": "", "type": "string", "name":
-"exists"}, {"default": [], "doc": "", "type": {"items": {"doc": "",
-"type": "record", "name": "AlleleResource", "fields": [{"doc": "",
-"type": "string", "name": "allele"}, {"doc": "", "type": "double",
-"name": "frequency"}]}, "type": "array"}, "name": "frequencies"},
-{"default": null, "doc": "", "type": ["null", "int"], "name":
-"observed"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "info"}, {"default": null, "doc": "", "type": ["null", {"doc":
-"", "type": "record", "name": "ErrorResource", "fields": [{"doc": "",
-"type": "string", "name": "name"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}]}], "name":
-"err"}]}, "name": "response"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "beacon",
-        "query",
-        "response",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'query': QueryResource,
-            'response': ResponseResource,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'query': QueryResource,
-            'response': ResponseResource,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['beacon', 'query', 'response']
-
-    def __init__(self):
-        self.beacon = None
-        self.query = None
-        self.response = None
+version = '0.6.0a1'
 
 
 class Call(ProtocolElement):
     """
-A `Call` represents the determination of genotype with respect to a
-particular variant. It may include associated information such as quality
-and phasing. For example, a call might assign a probability of 0.32 to
-the occurrence of a SNP named rs1234 in a call set with the name NA12345.
+    A Call represents the determination of genotype with respect to a
+    particular Variant.  It may include associated information such as
+    quality and phasing. For example, a call might assign a
+    probability of 0.32 to the occurrence of a SNP named rs1234 in a
+    call set with the name NA12345.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name": "Call",
-"fields": [{"doc": "", "type": ["null", "string"], "name":
-"callSetId"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "callSetName"}, {"default": [], "doc": "", "type": {"items":
-"int", "type": "array"}, "name": "genotype"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "phaseset"}, {"default": [],
-"doc": "", "type": {"items": "double", "type": "array"}, "name":
-"genotypeLikelihood"}, {"default": {}, "doc": "", "type": {"values":
-{"items": "string", "type": "array"}, "type": "map"}, "name":
-"info"}], "doc": ""}
+"fields": [{"default": null, "doc": "", "type": ["null", "string"],
+"name": "callSetName"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "callSetId"}, {"default": [], "doc": "", "type":
+{"items": "int", "type": "array"}, "name": "genotype"}, {"default":
+null, "doc": "", "type": ["null", "string"], "name": "phaseset"},
+{"default": [], "doc": "", "type": {"items": "double", "type":
+"array"}, "name": "genotypeLikelihood"}, {"default": {}, "doc": "",
+"type": {"values": {"items": "string", "type": "array"}, "type":
+"map"}, "name": "info"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["callSetId"])
+    requiredFields = set([])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -252,24 +45,75 @@ the occurrence of a SNP named rs1234 in a call set with the name NA12345.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['callSetId', 'callSetName', 'genotype', 'genotypeLikelihood',
-                 'info', 'phaseset']
+    __slots__ = [
+        'callSetId', 'callSetName', 'genotype', 'genotypeLikelihood',
+        'info', 'phaseset'
+    ]
 
-    def __init__(self):
-        self.callSetId = None
-        self.callSetName = None
-        self.genotype = []
-        self.genotypeLikelihood = []
-        self.info = {}
-        self.phaseset = None
+    def __init__(self, **kwargs):
+        self.callSetId = kwargs.get(
+            'callSetId', None)
+        """
+        The ID of the call set this variant call belongs to.    If
+        this field is not present, the ordering of the call sets from
+        a   SearchCallSetsRequest over this VariantSet is guaranteed
+        to match   the ordering of the calls on this Variant.   The
+        number of results will also be the same.
+        """
+        self.callSetName = kwargs.get(
+            'callSetName', None)
+        """
+        The name of the call set this variant call belongs to.   If
+        this field is not present, the ordering of the call sets from
+        a   SearchCallSetsRequest over this VariantSet is guaranteed
+        to match   the ordering of the calls on this Variant.   The
+        number of results will also be the same.
+        """
+        self.genotype = kwargs.get(
+            'genotype', [])
+        """
+        The genotype of this variant call.    A 0 value represents the
+        reference allele of the associated Variant. Any   other value
+        is a 1-based index into the alternate alleles of the
+        associated   Variant.    If a variant had a referenceBases
+        field of "T", an alternateBases   value of ["A", "C"], and the
+        genotype was [2, 1], that would mean the call   represented
+        the heterozygous value "CA" for this variant. If the genotype
+        was instead [0, 1] the represented value would be "TA".
+        Ordering of the   genotype values is important if the phaseset
+        field is present.
+        """
+        self.genotypeLikelihood = kwargs.get(
+            'genotypeLikelihood', [])
+        """
+        The genotype likelihoods for this variant call. Each array
+        entry   represents how likely a specific genotype is for this
+        call as   log10(P(data | genotype)), analogous to the GL tag
+        in the VCF spec. The   value ordering is defined by the GL tag
+        in the VCF spec.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional variant call information.
+        """
+        self.phaseset = kwargs.get(
+            'phaseset', None)
+        """
+        If this field is not null, this variant call's genotype
+        ordering implies   the phase of the bases and is consistent
+        with any other variant calls on   the same contig which have
+        the same phaseset string.
+        """
 
 
 class CallSet(ProtocolElement):
     """
-A `CallSet` is a collection of variant calls for a particular sample.
-It belongs to a `VariantSet`. This is equivalent to one column in VCF.
+    A CallSet is a collection of calls that were generated by the same
+    analysis of the same sample.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name": "CallSet",
@@ -297,19 +141,56 @@ null, "doc": "", "type": ["null", "string"], "name": "name"}, {"doc":
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['created', 'id', 'info', 'name', 'sampleId', 'updated',
-                 'variantSetIds']
+    __slots__ = [
+        'created', 'id', 'info', 'name', 'sampleId', 'updated',
+        'variantSetIds'
+    ]
 
-    def __init__(self):
-        self.created = None
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.sampleId = None
-        self.updated = None
-        self.variantSetIds = []
+    def __init__(self, **kwargs):
+        self.created = kwargs.get(
+            'created', None)
+        """
+        The date this call set was created in milliseconds from the
+        epoch.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The call set ID.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional call set information.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The call set name.
+        """
+        self.sampleId = kwargs.get(
+            'sampleId', None)
+        """
+        The sample this call set's data was generated from.   Note:
+        the current API does not have a rigorous definition of sample.
+        Therefore, this   field actually contains an arbitrary string,
+        typically corresponding to the sampleId   field in the read
+        groups used to generate this call set.
+        """
+        self.updated = kwargs.get(
+            'updated', None)
+        """
+        The time at which this call set was last updated in
+        milliseconds from the epoch.
+        """
+        self.variantSetIds = kwargs.get(
+            'variantSetIds', [])
+        """
+        The IDs of the variant sets this call set has calls in.
+        """
 
 
 class Characterization(ProtocolElement):
@@ -360,45 +241,45 @@ Read characterization data.
 
 class CigarOperation(object):
     """
-An enum for the different types of CIGAR alignment operations that exist.
-Used wherever CIGAR alignments are used. The different enumerated values
-have the following usage:
-
-* `ALIGNMENT_MATCH`: An alignment match indicates that a sequence can be
-  aligned to the reference without evidence of an INDEL. Unlike the
-  `SEQUENCE_MATCH` and `SEQUENCE_MISMATCH` operators, the `ALIGNMENT_MATCH`
-  operator does not indicate whether the reference and read sequences are an
-  exact match. This operator is equivalent to SAM's `M`.
-* `INSERT`: The insert operator indicates that the read contains evidence of
-  bases being inserted into the reference. This operator is equivalent to
-  SAM's `I`.
-* `DELETE`: The delete operator indicates that the read contains evidence of
-  bases being deleted from the reference. This operator is equivalent to
-  SAM's `D`.
-* `SKIP`: The skip operator indicates that this read skips a long segment of
-  the reference, but the bases have not been deleted. This operator is
-  commonly used when working with RNA-seq data, where reads may skip long
-  segments of the reference between exons. This operator is equivalent to
-  SAM's 'N'.
-* `CLIP_SOFT`: The soft clip operator indicates that bases at the start/end
-  of a read have not been considered during alignment. This may occur if the
-  majority of a read maps, except for low quality bases at the start/end of
-  a read. This operator is equivalent to SAM's 'S'. Bases that are soft clipped
-  will still be stored in the read.
-* `CLIP_HARD`: The hard clip operator indicates that bases at the start/end of
-  a read have been omitted from this alignment. This may occur if this linear
-  alignment is part of a chimeric alignment, or if the read has been trimmed
-  (e.g., during error correction, or to trim poly-A tails for RNA-seq). This
-  operator is equivalent to SAM's 'H'.
-* `PAD`: The pad operator indicates that there is padding in an alignment.
-  This operator is equivalent to SAM's 'P'.
-* `SEQUENCE_MATCH`: This operator indicates that this portion of the aligned
-  sequence exactly matches the reference (e.g., all bases are equal to the
-  reference bases). This operator is equivalent to SAM's '='.
-* `SEQUENCE_MISMATCH`: This operator indicates that this portion of the
-  aligned sequence is an alignment match to the reference, but a sequence
-  mismatch (e.g., the bases are not equal to the reference). This can
-  indicate a SNP or a read error. This operator is equivalent to SAM's 'X'.
+    An enum for the different types of CIGAR alignment operations that
+    exist. Used wherever CIGAR alignments are used. The different
+    enumerated values have the following usage:  * ALIGNMENT_MATCH: An
+    alignment match indicates that a sequence can be   aligned to the
+    reference without evidence of an INDEL. Unlike the
+    SEQUENCE_MATCH and SEQUENCE_MISMATCH operators, the
+    ALIGNMENT_MATCH   operator does not indicate whether the reference
+    and read sequences are an   exact match. This operator is
+    equivalent to SAM's M. * INSERT: The insert operator indicates
+    that the read contains evidence of   bases being inserted into the
+    reference. This operator is equivalent to   SAM's I. * DELETE: The
+    delete operator indicates that the read contains evidence of
+    bases being deleted from the reference. This operator is
+    equivalent to   SAM's D. * SKIP: The skip operator indicates that
+    this read skips a long segment of   the reference, but the bases
+    have not been deleted. This operator is   commonly used when
+    working with RNA-seq data, where reads may skip long   segments of
+    the reference between exons. This operator is equivalent to
+    SAM's 'N'. * CLIP_SOFT: The soft clip operator indicates that
+    bases at the start/end   of a read have not been considered during
+    alignment. This may occur if the   majority of a read maps, except
+    for low quality bases at the start/end of   a read. This operator
+    is equivalent to SAM's 'S'. Bases that are soft clipped   will
+    still be stored in the read. * CLIP_HARD: The hard clip operator
+    indicates that bases at the start/end of   a read have been
+    omitted from this alignment. This may occur if this linear
+    alignment is part of a chimeric alignment, or if the read has been
+    trimmed   (e.g., during error correction, or to trim poly-A tails
+    for RNA-seq). This   operator is equivalent to SAM's 'H'. * PAD:
+    The pad operator indicates that there is padding in an alignment.
+    This operator is equivalent to SAM's 'P'. * SEQUENCE_MATCH: This
+    operator indicates that this portion of the aligned   sequence
+    exactly matches the reference (e.g., all bases are equal to the
+    reference bases). This operator is equivalent to SAM's '='. *
+    SEQUENCE_MISMATCH: This operator indicates that this portion of
+    the   aligned sequence is an alignment match to the reference, but
+    a sequence   mismatch (e.g., the bases are not equal to the
+    reference). This can   indicate a SNP or a read error. This
+    operator is equivalent to SAM's 'X'.
     """
     ALIGNMENT_MATCH = "ALIGNMENT_MATCH"
     INSERT = "INSERT"
@@ -413,7 +294,8 @@ have the following usage:
 
 class CigarUnit(ProtocolElement):
     """
-A structure for an instance of a CIGAR operation.
+    A structure for an instance of a CIGAR operation. FIXME: This
+    belongs under Reads (only readAlignment refers to this)
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
@@ -439,190 +321,51 @@ null, "doc": "", "type": ["null", "string"], "name":
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['operation', 'operationLength', 'referenceSequence']
+    __slots__ = [
+        'operation', 'operationLength', 'referenceSequence'
+    ]
 
-    def __init__(self):
-        self.operation = None
-        self.operationLength = None
-        self.referenceSequence = None
-
-
-class DataSetResource(ProtocolElement):
-    """
-DataSetResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"DataSetResource", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"doc": "", "type": "string", "name": "reference"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"},
-{"default": null, "doc": "", "type": ["null", {"doc": "", "type":
-"record", "name": "DataSizeResource", "fields": [{"doc": "", "type":
-"int", "name": "variants"}, {"doc": "", "type": "int", "name":
-"samples"}]}], "name": "size"}, {"doc": "", "type": "boolean", "name":
-"multiple"}, {"default": [], "doc": "", "type": {"items": "string",
-"type": "array"}, "name": "datasets"}, {"default": [], "doc": "",
-"type": {"items": {"doc": "", "type": "record", "name":
-"DataUseResource", "fields": [{"doc": "", "type": "string", "name":
-"category"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "description"}, {"default": [], "doc": "", "type": {"items":
-{"doc": "", "type": "record", "name": "DataUseRequirementResource",
-"fields": [{"doc": "", "type": "string", "name": "name"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"}]},
-"type": "array"}, "name": "requirements"}]}, "type": "array"}, "name":
-"data_use"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "id",
-        "multiple",
-        "reference",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'data_use': DataUseResource,
-            'size': DataSizeResource,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'data_use': DataUseResource,
-            'size': DataSizeResource,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['data_use', 'datasets', 'description', 'id', 'multiple',
-                 'reference', 'size']
-
-    def __init__(self):
-        self.data_use = []
-        self.datasets = []
-        self.description = None
-        self.id = None
-        self.multiple = None
-        self.reference = None
-        self.size = None
-
-
-class DataSizeResource(ProtocolElement):
-    """
-DataSetSizeResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"DataSizeResource", "fields": [{"doc": "", "type": "int", "name":
-"variants"}, {"doc": "", "type": "int", "name": "samples"}], "doc":
-""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "samples",
-        "variants",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['samples', 'variants']
-
-    def __init__(self):
-        self.samples = None
-        self.variants = None
-
-
-class DataUseRequirementResource(ProtocolElement):
-    """
-DataUseRequirementResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"DataUseRequirementResource", "fields": [{"doc": "", "type": "string",
-"name": "name"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "description"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["name"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['description', 'name']
-
-    def __init__(self):
-        self.description = None
-        self.name = None
-
-
-class DataUseResource(ProtocolElement):
-    """
-DataUseResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"DataUseResource", "fields": [{"doc": "", "type": "string", "name":
-"category"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "description"}, {"default": [], "doc": "", "type": {"items":
-{"doc": "", "type": "record", "name": "DataUseRequirementResource",
-"fields": [{"doc": "", "type": "string", "name": "name"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"}]},
-"type": "array"}, "name": "requirements"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["category"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'requirements': DataUseRequirementResource,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'requirements': DataUseRequirementResource,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['category', 'description', 'requirements']
-
-    def __init__(self):
-        self.category = None
-        self.description = None
-        self.requirements = []
+    def __init__(self, **kwargs):
+        self.operation = kwargs.get(
+            'operation', None)
+        """
+        The operation type.
+        """
+        self.operationLength = kwargs.get(
+            'operationLength', None)
+        """
+        The number of bases that the operation runs for.
+        """
+        self.referenceSequence = kwargs.get(
+            'referenceSequence', None)
+        """
+        referenceSequence is only used at mismatches
+        (SEQUENCE_MISMATCH)   and deletions (DELETE). Filling this
+        field replaces the MD tag.   If the relevant information is
+        not available, leave this field as null.
+        """
 
 
 class Dataset(ProtocolElement):
     """
-No documentation
+    A Dataset is a collection of related data of multiple types. Data
+    providers decide how to group data into datasets. See [Metadata
+    API](../api/metadata.html) for a more detailed discussion.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name": "Dataset",
 "fields": [{"doc": "", "type": "string", "name": "id"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"}]}
+null, "doc": "", "type": ["null", "string"], "name": "name"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"description"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
+    requiredFields = set([
+        "id",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -632,60 +375,63 @@ null, "doc": "", "type": ["null", "string"], "name": "description"}]}
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['description', 'id']
+    __slots__ = [
+        'description', 'id', 'name'
+    ]
 
-    def __init__(self):
-        self.description = None
-        self.id = None
-
-
-class ErrorResource(ProtocolElement):
-    """
-ErrorResource
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"ErrorResource", "fields": [{"doc": "", "type": "string", "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "description"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["name"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['description', 'name']
-
-    def __init__(self):
-        self.description = None
-        self.name = None
+    def __init__(self, **kwargs):
+        self.description = kwargs.get(
+            'description', None)
+        """
+        Additional, human-readable information on the dataset.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The dataset's id, locally unique to the server instance.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The name of the dataset.
+        """
 
 
 class Experiment(ProtocolElement):
     """
-No documentation
+    An experimental preparation of a sample.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
-"Experiment", "fields": [{"default": null, "doc": "", "type": ["null",
-"string"], "name": "libraryId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "platformUnit"}, {"doc": "", "type":
-["null", "string"], "name": "sequencingCenter"}, {"doc": "", "type":
-["null", "string"], "name": "instrumentModel"}]}
+"Experiment", "fields": [{"doc": "", "type": "string", "name": "id"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"name"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "description"}, {"doc": "", "type": "string", "name":
+"recordCreateTime"}, {"doc": "", "type": "string", "name":
+"recordUpdateTime"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "runTime"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "molecule"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "strategy"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "selection"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"library"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "libraryLayout"}, {"doc": "", "type": ["null", "string"],
+"name": "instrumentModel"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "instrumentDataFile"}, {"doc": "", "type":
+["null", "string"], "name": "sequencingCenter"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "platformUnit"},
+{"default": {}, "doc": "", "type": {"values": {"items": "string",
+"type": "array"}, "type": "map"}, "name": "info"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
+        "id",
         "instrumentModel",
+        "recordCreateTime",
+        "recordUpdateTime",
         "sequencingCenter",
     ])
 
@@ -697,21 +443,165 @@ No documentation
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['instrumentModel', 'libraryId', 'platformUnit',
-                 'sequencingCenter']
+    __slots__ = [
+        'description', 'id', 'info', 'instrumentDataFile',
+        'instrumentModel', 'library', 'libraryLayout', 'molecule',
+        'name', 'platformUnit', 'recordCreateTime',
+        'recordUpdateTime', 'runTime', 'selection',
+        'sequencingCenter', 'strategy'
+    ]
 
-    def __init__(self):
-        self.instrumentModel = None
-        self.libraryId = None
-        self.platformUnit = None
-        self.sequencingCenter = None
+    def __init__(self, **kwargs):
+        self.description = kwargs.get(
+            'description', None)
+        """
+        A description of the experiment.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The experiment UUID. This is globally unique.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional experiment information.
+        """
+        self.instrumentDataFile = kwargs.get(
+            'instrumentDataFile', None)
+        """
+        The data file generated by the instrument.   TODO: This isn't
+        actually a file is it?   Should this be instrumentData
+        instead?
+        """
+        self.instrumentModel = kwargs.get(
+            'instrumentModel', None)
+        """
+        The instrument model used as part of this experiment.     This
+        maps to sequencing technology in BAM.
+        """
+        self.library = kwargs.get(
+            'library', None)
+        """
+        The name of the library used as part of this experiment.
+        """
+        self.libraryLayout = kwargs.get(
+            'libraryLayout', None)
+        """
+        The configuration of sequenced reads. (e.g. Single or Paired)
+        """
+        self.molecule = kwargs.get(
+            'molecule', None)
+        """
+        The molecule examined in this experiment. (e.g. genomics DNA,
+        total RNA)
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The name of the experiment.
+        """
+        self.platformUnit = kwargs.get(
+            'platformUnit', None)
+        """
+        The platform unit used as part of this experiment. This is a
+        flowcell-barcode   or slide unique identifier.
+        """
+        self.recordCreateTime = kwargs.get(
+            'recordCreateTime', None)
+        """
+        The time at which this record was created.    Format: ISO
+        8601, YYYY-MM-DDTHH:MM:SS.SSS (e.g. 2015-02-10T00:03:42.123Z)
+        """
+        self.recordUpdateTime = kwargs.get(
+            'recordUpdateTime', None)
+        """
+        The time at which this record was last updated.   Format: ISO
+        8601, YYYY-MM-DDTHH:MM:SS.SSS (e.g. 2015-02-10T00:03:42.123Z)
+        """
+        self.runTime = kwargs.get(
+            'runTime', None)
+        """
+        The time at which this experiment was performed.   Granularity
+        here is variable (e.g. date only).   Format: ISO 8601, YYYY-
+        MM-DDTHH:MM:SS (e.g. 2015-02-10T00:03:42)
+        """
+        self.selection = kwargs.get(
+            'selection', None)
+        """
+        The method used to enrich the target. (e.g.
+        immunoprecipitation, size   fractionation, MNase digestion)
+        """
+        self.sequencingCenter = kwargs.get(
+            'sequencingCenter', None)
+        """
+        The sequencing center used as part of this experiment.
+        """
+        self.strategy = kwargs.get(
+            'strategy', None)
+        """
+        The experiment technique or strategy applied to the sample.
+        (e.g. whole genome sequencing, RNA-seq, RIP-seq)
+        """
+
+
+class ExternalIdentifier(ProtocolElement):
+    """
+    Identifier from a public database
+    """
+    _schemaSource = """
+{"namespace": "org.ga4gh.models", "type": "record", "name":
+"ExternalIdentifier", "fields": [{"doc": "", "type": "string", "name":
+"database"}, {"doc": "", "type": "string", "name": "identifier"},
+{"doc": "", "type": "string", "name": "version"}], "doc": ""}
+"""
+    schema = avro.schema.parse(_schemaSource)
+    requiredFields = set([
+        "database",
+        "identifier",
+        "version",
+    ])
+
+    @classmethod
+    def isEmbeddedType(cls, fieldName):
+        embeddedTypes = {}
+        return fieldName in embeddedTypes
+
+    @classmethod
+    def getEmbeddedType(cls, fieldName):
+        embeddedTypes = {}
+
+        return embeddedTypes[fieldName]
+
+    __slots__ = [
+        'database', 'identifier', 'version'
+    ]
+
+    def __init__(self, **kwargs):
+        self.database = kwargs.get(
+            'database', None)
+        """
+        The source of the identifier.   (e.g. Ensembl)
+        """
+        self.identifier = kwargs.get(
+            'identifier', None)
+        """
+        The ID defined by the external database.   (e.g.
+        ENST00000000000)
+        """
+        self.version = kwargs.get(
+            'version', None)
+        """
+        The version of the object or the database   (e.g. 78)
+        """
 
 
 class GAException(ProtocolElement):
     """
-A general exception type.
+    A general exception type.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "error", "name":
@@ -720,48 +610,8 @@ A general exception type.
 "errorCode"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["message"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['errorCode', 'message']
-
-    def __init__(self):
-        self.errorCode = -1
-        self.message = None
-
-
-class ExpressionLevel(ProtocolElement):
-    """
-The actual FPKM data for each feature.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh", "type": "record", "name":
-"ExpressionLevel", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"doc": "", "type": "string", "name": "featureGroupId"},
-{"doc": "", "type": "string", "name": "annotationId"}, {"doc": "",
-"type": "float", "name": "rawReadCount"}, {"default": null, "doc": "",
-"type": ["null", "float"], "name": "expression"}, {"default": false,
-"doc": "", "type": ["null", "boolean"], "name": "isNormalized"},
-{"default": null, "doc": "", "type": ["null", {"symbols": ["FPKM",
-"RPM"], "doc": "", "type": "enum", "name": "ExpressionUnits"}],
-"name": "units"}, {"default": null, "doc": "", "type": ["null",
-"float"], "name": "score"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
-        "annotationId",
-        "featureGroupId",
-        "id",
-        "rawReadCount",
+        "message",
     ])
 
     @classmethod
@@ -772,240 +622,53 @@ The actual FPKM data for each feature.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['annotationId', 'expression', 'featureGroupId', 'id',
-                 'isNormalized', 'rawReadCount', 'score',
-                 'units']
+    __slots__ = [
+        'errorCode', 'message'
+    ]
 
-    def __init__(self):
-        self.annotationId = None
-        self.expression = None
-        self.featureGroupId = None
-        self.id = None
-        self.isNormalized = False
-        self.rawReadCount = None
-        self.score = None
-        self.units = None
-
-
-class ExpressionUnits(object):
-    """
-Units for expression level
-    """
-    FPKM = "FPKM"
-    RPM = "RPM"
-
-
-class FeatureGroup(ProtocolElement):
-    """
-Identifying information for annotated features.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh", "type": "record", "name": "FeatureGroup",
-"fields": [{"doc": "", "type": "string", "name": "id"}, {"doc": "",
-"type": "string", "name": "analysisId"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "name"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "description"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "created"},
-{"default": null, "doc": "", "type": ["null", "long"], "name":
-"updated"}, {"default": {}, "doc": "", "type": {"values": {"items":
-"string", "type": "array"}, "type": "map"}, "name": "info"}], "doc":
-""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "analysisId",
-        "id",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['analysisId', 'created', 'description', 'id', 'info', 'name',
-                 'updated']
-
-    def __init__(self):
-        self.analysisId = None
-        self.created = None
-        self.description = None
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.updated = None
-
-
-class GeneticSex(object):
-    """
-* `FEMALE`: Genetic/chromosomal female
-* `MALE`: Genetic/chromosomal male
-* `OTHER`: sex information ambiguous, e.g. not clear XX/XY/ZZ...
-* `MIXED_SAMPLE`: Multiple samples, e.g. pooled, environmental
-* `NOT_APPLICABLE`: Used for prokaryotes, snails, etc. Not used for humans.
-    """
-    FEMALE = "FEMALE"
-    MALE = "MALE"
-    OTHER = "OTHER"
-    MIXED_SAMPLE = "MIXED_SAMPLE"
-    NOT_APPLICABLE = "NOT_APPLICABLE"
-
-
-class Individual(ProtocolElement):
-    """
-An individual (or subject) typically corresponds to an individual
-human or other organism.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.models", "type": "record", "name":
-"Individual", "fields": [{"doc": "", "type": "string", "name": "id"},
-{"default": [], "doc": "", "type": {"items": "string", "type":
-"array"}, "name": "groupIds"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "name"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "created"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "updated"},
-{"default": null, "doc": "", "type": ["null", {"doc": "", "type":
-"record", "name": "OntologyTerm", "fields": [{"doc": "", "type":
-"string", "name": "ontologySource"}, {"doc": "", "type": "string",
-"name": "id"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "name"}]}], "name": "species"}, {"default": null,
-"doc": "", "type": {"symbols": ["FEMALE", "MALE", "OTHER",
-"MIXED_SAMPLE", "NOT_APPLICABLE"], "doc": "", "type": "enum", "name":
-"GeneticSex"}, "name": "sex"}, {"default": null, "doc": "", "type":
-["null", "OntologyTerm"], "name": "developmentalStage"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "dateOfBirth"},
-{"default": [], "doc": "", "type": {"items": "OntologyTerm", "type":
-"array"}, "name": "diseases"}, {"default": [], "doc": "", "type":
-{"items": "OntologyTerm", "type": "array"}, "name": "phenotypes"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"stagingSystem"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "clinicalTreatment"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "strain"}, {"default": {}, "doc":
-"", "type": {"values": {"items": "string", "type": "array"}, "type":
-"map"}, "name": "info"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'developmentalStage': OntologyTerm,
-            'diseases': OntologyTerm,
-            'phenotypes': OntologyTerm,
-            'species': OntologyTerm,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'developmentalStage': OntologyTerm,
-            'diseases': OntologyTerm,
-            'phenotypes': OntologyTerm,
-            'species': OntologyTerm,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['clinicalTreatment', 'created', 'dateOfBirth', 'description',
-                 'developmentalStage', 'diseases', 'groupIds',
-                 'id', 'info', 'name', 'phenotypes', 'sex',
-                 'species', 'stagingSystem', 'strain',
-                 'updated']
-
-    def __init__(self):
-        self.clinicalTreatment = None
-        self.created = None
-        self.dateOfBirth = None
-        self.description = None
-        self.developmentalStage = None
-        self.diseases = []
-        self.groupIds = []
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.phenotypes = []
-        self.sex = None
-        self.species = None
-        self.stagingSystem = None
-        self.strain = None
-        self.updated = None
-
-
-class IndividualGroup(ProtocolElement):
-    """
-Represents a group of individuals. (e.g. a trio)
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.models", "type": "record", "name":
-"IndividualGroup", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "name"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "description"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "created"}, {"default": null, "doc":
-"", "type": ["null", "long"], "name": "updated"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "type"}, {"default":
-{}, "doc": "", "type": {"values": {"items": "string", "type":
-"array"}, "type": "map"}, "name": "info"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['created', 'description', 'id', 'info', 'name', 'type',
-                 'updated']
-
-    def __init__(self):
-        self.created = None
-        self.description = None
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.type = None
-        self.updated = None
+    def __init__(self, **kwargs):
+        self.errorCode = kwargs.get(
+            'errorCode', -1)
+        """
+        The numerical error code
+        """
+        self.message = kwargs.get(
+            'message', None)
+        """
+        The error message
+        """
 
 
 class LinearAlignment(ProtocolElement):
     """
-A linear alignment can be represented by one CIGAR string.
+    A linear alignment describes the alignment of a read to a
+    Reference, using a position and CIGAR array.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "LinearAlignment", "fields": [{"doc": "", "type": {"doc": "", "type":
 "record", "name": "Position", "fields": [{"doc": "", "type": "string",
 "name": "referenceName"}, {"doc": "", "type": "long", "name":
-"position"}, {"doc": "", "type": {"symbols": ["POS_STRAND",
-"NEG_STRAND", "NO_STRAND"], "doc": "", "type": "enum", "name":
-"Strand"}, "name": "strand"}]}, "name": "position"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "mappingQuality"},
-{"default": [], "doc": "", "type": {"items": {"doc": "", "type":
-"record", "name": "CigarUnit", "fields": [{"doc": "", "type":
-{"symbols": ["ALIGNMENT_MATCH", "INSERT", "DELETE", "SKIP",
-"CLIP_SOFT", "CLIP_HARD", "PAD", "SEQUENCE_MATCH",
-"SEQUENCE_MISMATCH"], "doc": "", "type": "enum", "name":
-"CigarOperation"}, "name": "operation"}, {"doc": "", "type": "long",
-"name": "operationLength"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "referenceSequence"}]}, "type": "array"},
-"name": "cigar"}], "doc": ""}
+"position"}, {"doc": "", "type": {"symbols": ["NEG_STRAND",
+"POS_STRAND"], "doc": "", "type": "enum", "name": "Strand"}, "name":
+"strand"}]}, "name": "position"}, {"default": null, "doc": "", "type":
+["null", "int"], "name": "mappingQuality"}, {"default": [], "doc": "",
+"type": {"items": {"doc": "", "type": "record", "name": "CigarUnit",
+"fields": [{"doc": "", "type": {"symbols": ["ALIGNMENT_MATCH",
+"INSERT", "DELETE", "SKIP", "CLIP_SOFT", "CLIP_HARD", "PAD",
+"SEQUENCE_MATCH", "SEQUENCE_MISMATCH"], "doc": "", "type": "enum",
+"name": "CigarOperation"}, "name": "operation"}, {"doc": "", "type":
+"long", "name": "operationLength"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "referenceSequence"}]}, "type":
+"array"}, "name": "cigar"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["position"])
+    requiredFields = set([
+        "position",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -1021,22 +684,39 @@ A linear alignment can be represented by one CIGAR string.
             'cigar': CigarUnit,
             'position': Position,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['cigar', 'mappingQuality', 'position']
+    __slots__ = [
+        'cigar', 'mappingQuality', 'position'
+    ]
 
-    def __init__(self):
-        self.cigar = []
-        self.mappingQuality = None
-        self.position = None
+    def __init__(self, **kwargs):
+        self.cigar = kwargs.get(
+            'cigar', [])
+        """
+        Represents the local alignment of this sequence (alignment
+        matches, indels, etc)   versus the reference.
+        """
+        self.mappingQuality = kwargs.get(
+            'mappingQuality', None)
+        """
+        The mapping quality of this alignment, meaning the likelihood
+        that the read   maps to this position.    Specifically, this
+        is -10 log10 Pr(mapping position is wrong), rounded to the
+        nearest integer.
+        """
+        self.position = kwargs.get(
+            'position', None)
+        """
+        The position of this alignment.
+        """
 
 
 class ListReferenceBasesRequest(ProtocolElement):
     """
-The query parameters for a request to `GET /references/{id}/bases`, for
-example:
-
-`GET /references/{id}/bases?start=100&end=200`
+    The query parameters for a request to GET /references/{id}/bases,
+    for example:  GET /references/{id}/bases?start=100&end=200
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -1056,19 +736,42 @@ example:
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['end', 'pageToken', 'start']
+    __slots__ = [
+        'end', 'pageToken', 'start'
+    ]
 
-    def __init__(self):
-        self.end = None
-        self.pageToken = None
-        self.start = 0
+    def __init__(self, **kwargs):
+        self.end = kwargs.get(
+            'end', None)
+        """
+        The end position (0-based, exclusive) of this query. Defaults
+        to the length of this Reference.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+        self.start = kwargs.get(
+            'start', 0)
+        """
+        The start position (0-based) of this query. Defaults to 0.
+        Genomic positions are non-negative integers less than
+        reference length.   Requests spanning the join of circular
+        genomes are represented as   two requests one on each side of
+        the join (position 0).
+        """
 
 
 class ListReferenceBasesResponse(ProtocolElement):
     """
-The response from `GET /references/{id}/bases` expressed as JSON.
+    The response from GET /references/{id}/bases expressed as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -1078,42 +781,8 @@ The response from `GET /references/{id}/bases` expressed as JSON.
 "string"], "name": "nextPageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["sequence"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['nextPageToken', 'offset', 'sequence']
-
-    def __init__(self):
-        self.nextPageToken = None
-        self.offset = 0
-        self.sequence = None
-
-
-class OntologyTerm(ProtocolElement):
-    """
-An ontology term describing an attribute. (e.g. the phenotype attribute
-'polydactyly' from HPO)
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.models", "type": "record", "name":
-"OntologyTerm", "fields": [{"doc": "", "type": "string", "name":
-"ontologySource"}, {"doc": "", "type": "string", "name": "id"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
-        "id",
-        "ontologySource",
+        "sequence",
     ])
 
     @classmethod
@@ -1124,30 +793,50 @@ An ontology term describing an attribute. (e.g. the phenotype attribute
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['id', 'name', 'ontologySource']
+    __slots__ = [
+        'nextPageToken', 'offset', 'sequence'
+    ]
 
-    def __init__(self):
-        self.id = None
-        self.name = None
-        self.ontologySource = None
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.offset = kwargs.get(
+            'offset', 0)
+        """
+        The offset position (0-based) of the given sequence from the
+        start of this   Reference. This value will differ for each
+        page in a paginated request.
+        """
+        self.sequence = kwargs.get(
+            'sequence', None)
+        """
+        A substring of the bases that make up this reference. Bases
+        are represented   as IUPAC-IUB codes; this string matches the
+        regexp [ACGTMRWSYKVHDBN]*.
+        """
 
 
 class Position(ProtocolElement):
     """
-An abstraction for referring to a genomic position, in relation to some
-already known reference. For now, represents a genomic position as a reference
-name, a base number on that reference (0-based), and a flag to say if it's the
-forward or reverse strand that we're talking about.
+    A Position is an unoriented base in some Reference. A Position is
+    represented by a Reference name, and a base number on that
+    Reference (0-based).
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "Position", "fields": [{"doc": "", "type": "string", "name":
 "referenceName"}, {"doc": "", "type": "long", "name": "position"},
-{"doc": "", "type": {"symbols": ["POS_STRAND", "NEG_STRAND",
-"NO_STRAND"], "doc": "", "type": "enum", "name": "Strand"}, "name":
-"strand"}], "doc": ""}
+{"doc": "", "type": {"symbols": ["NEG_STRAND", "POS_STRAND"], "doc":
+"", "type": "enum", "name": "Strand"}, "name": "strand"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
@@ -1164,19 +853,37 @@ forward or reverse strand that we're talking about.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['position', 'referenceName', 'strand']
+    __slots__ = [
+        'position', 'referenceName', 'strand'
+    ]
 
-    def __init__(self):
-        self.position = None
-        self.referenceName = None
-        self.strand = None
+    def __init__(self, **kwargs):
+        self.position = kwargs.get(
+            'position', None)
+        """
+        The 0-based offset from the start of the forward strand for
+        that Reference.   Genomic positions are non-negative integers
+        less than Reference length.
+        """
+        self.referenceName = kwargs.get(
+            'referenceName', None)
+        """
+        The name of the Reference on which the Position is located.
+        """
+        self.strand = kwargs.get(
+            'strand', None)
+        """
+        Strand the position is associated with.
+        """
 
 
 class Program(ProtocolElement):
     """
-No documentation
+    Program can be used to track the provenance of how read data was
+    generated.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name": "Program",
@@ -1185,7 +892,8 @@ No documentation
 "string"], "name": "id"}, {"default": null, "doc": "", "type":
 ["null", "string"], "name": "name"}, {"default": null, "doc": "",
 "type": ["null", "string"], "name": "prevProgramId"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "version"}]}
+null, "doc": "", "type": ["null", "string"], "name": "version"}],
+"doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -1198,96 +906,78 @@ null, "doc": "", "type": ["null", "string"], "name": "version"}]}
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['commandLine', 'id', 'name', 'prevProgramId', 'version']
+    __slots__ = [
+        'commandLine', 'id', 'name', 'prevProgramId', 'version'
+    ]
 
-    def __init__(self):
-        self.commandLine = None
-        self.id = None
-        self.name = None
-        self.prevProgramId = None
-        self.version = None
-
-
-class QueryResource(ProtocolElement):
-    """
-A request for information about a specific site
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"QueryResource", "fields": [{"doc": "", "type": "string", "name":
-"allele"}, {"doc": "", "type": "string", "name": "chromosome"},
-{"doc": "", "type": "long", "name": "position"}, {"doc": "", "type":
-"string", "name": "reference"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "dataset"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([
-        "allele",
-        "chromosome",
-        "position",
-        "reference",
-    ])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['allele', 'chromosome', 'dataset', 'position', 'reference']
-
-    def __init__(self):
-        self.allele = None
-        self.chromosome = None
-        self.dataset = None
-        self.position = None
-        self.reference = None
+    def __init__(self, **kwargs):
+        self.commandLine = kwargs.get(
+            'commandLine', None)
+        """
+        The command line used to run this program.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The user specified ID of the program.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The name of the program.
+        """
+        self.prevProgramId = kwargs.get(
+            'prevProgramId', None)
+        """
+        The ID of the program run before this one.
+        """
+        self.version = kwargs.get(
+            'version', None)
+        """
+        The version of the program run.
+        """
 
 
 class ReadAlignment(ProtocolElement):
     """
-Each read alignment describes a linear alignment with additional information
-about the fragment and the read. A read alignment object is equivalent to a
-line in a SAM file.
+    Each read alignment describes an alignment with additional
+    information about the fragment and the read. A read alignment
+    object is equivalent to a line in a SAM file.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "ReadAlignment", "fields": [{"doc": "", "type": ["null", "string"],
 "name": "id"}, {"doc": "", "type": "string", "name": "readGroupId"},
 {"doc": "", "type": "string", "name": "fragmentName"}, {"default":
-false, "doc": "", "type": ["boolean", "null"], "name":
-"properPlacement"}, {"default": false, "doc": "", "type": ["boolean",
-"null"], "name": "duplicateFragment"}, {"default": null, "doc": "",
+null, "doc": "", "type": ["null", "boolean"], "name":
+"properPlacement"}, {"default": null, "doc": "", "type": ["null",
+"boolean"], "name": "duplicateFragment"}, {"default": null, "doc": "",
 "type": ["null", "int"], "name": "numberReads"}, {"default": null,
 "doc": "", "type": ["null", "int"], "name": "fragmentLength"},
 {"default": null, "doc": "", "type": ["null", "int"], "name":
-"readNumber"}, {"default": false, "doc": "", "type": ["boolean",
-"null"], "name": "failedVendorQualityChecks"}, {"default": null,
+"readNumber"}, {"default": null, "doc": "", "type": ["null",
+"boolean"], "name": "failedVendorQualityChecks"}, {"default": null,
 "doc": "", "type": ["null", {"doc": "", "type": "record", "name":
 "LinearAlignment", "fields": [{"doc": "", "type": {"doc": "", "type":
 "record", "name": "Position", "fields": [{"doc": "", "type": "string",
 "name": "referenceName"}, {"doc": "", "type": "long", "name":
-"position"}, {"doc": "", "type": {"symbols": ["POS_STRAND",
-"NEG_STRAND", "NO_STRAND"], "doc": "", "type": "enum", "name":
-"Strand"}, "name": "strand"}]}, "name": "position"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "mappingQuality"},
-{"default": [], "doc": "", "type": {"items": {"doc": "", "type":
-"record", "name": "CigarUnit", "fields": [{"doc": "", "type":
-{"symbols": ["ALIGNMENT_MATCH", "INSERT", "DELETE", "SKIP",
-"CLIP_SOFT", "CLIP_HARD", "PAD", "SEQUENCE_MATCH",
-"SEQUENCE_MISMATCH"], "doc": "", "type": "enum", "name":
-"CigarOperation"}, "name": "operation"}, {"doc": "", "type": "long",
-"name": "operationLength"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "referenceSequence"}]}, "type": "array"},
-"name": "cigar"}]}], "name": "alignment"}, {"default": false, "doc":
-"", "type": ["boolean", "null"], "name": "secondaryAlignment"},
-{"default": false, "doc": "", "type": ["boolean", "null"], "name":
+"position"}, {"doc": "", "type": {"symbols": ["NEG_STRAND",
+"POS_STRAND"], "doc": "", "type": "enum", "name": "Strand"}, "name":
+"strand"}]}, "name": "position"}, {"default": null, "doc": "", "type":
+["null", "int"], "name": "mappingQuality"}, {"default": [], "doc": "",
+"type": {"items": {"doc": "", "type": "record", "name": "CigarUnit",
+"fields": [{"doc": "", "type": {"symbols": ["ALIGNMENT_MATCH",
+"INSERT", "DELETE", "SKIP", "CLIP_SOFT", "CLIP_HARD", "PAD",
+"SEQUENCE_MATCH", "SEQUENCE_MISMATCH"], "doc": "", "type": "enum",
+"name": "CigarOperation"}, "name": "operation"}, {"doc": "", "type":
+"long", "name": "operationLength"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "referenceSequence"}]}, "type":
+"array"}, "name": "cigar"}]}], "name": "alignment"}, {"default": null,
+"doc": "", "type": ["null", "boolean"], "name": "secondaryAlignment"},
+{"default": null, "doc": "", "type": ["null", "boolean"], "name":
 "supplementaryAlignment"}, {"default": null, "doc": "", "type":
 ["null", "string"], "name": "alignedSequence"}, {"default": [], "doc":
 "", "type": {"items": "int", "type": "array"}, "name":
@@ -1317,39 +1007,154 @@ false, "doc": "", "type": ["boolean", "null"], "name":
             'alignment': LinearAlignment,
             'nextMatePosition': Position,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['alignedQuality', 'alignedSequence', 'alignment',
-                 'duplicateFragment',
-                 'failedVendorQualityChecks',
-                 'fragmentLength', 'fragmentName', 'id',
-                 'info', 'nextMatePosition', 'numberReads',
-                 'properPlacement', 'readGroupId',
-                 'readNumber', 'secondaryAlignment',
-                 'supplementaryAlignment']
+    __slots__ = [
+        'alignedQuality', 'alignedSequence', 'alignment',
+        'duplicateFragment', 'failedVendorQualityChecks',
+        'fragmentLength', 'fragmentName', 'id', 'info',
+        'nextMatePosition', 'numberReads', 'properPlacement',
+        'readGroupId', 'readNumber', 'secondaryAlignment',
+        'supplementaryAlignment'
+    ]
 
-    def __init__(self):
-        self.alignedQuality = []
-        self.alignedSequence = None
-        self.alignment = None
-        self.duplicateFragment = False
-        self.failedVendorQualityChecks = False
-        self.fragmentLength = None
-        self.fragmentName = None
-        self.id = None
-        self.info = {}
-        self.nextMatePosition = None
-        self.numberReads = None
-        self.properPlacement = False
-        self.readGroupId = None
-        self.readNumber = None
-        self.secondaryAlignment = False
-        self.supplementaryAlignment = False
+    def __init__(self, **kwargs):
+        self.alignedQuality = kwargs.get(
+            'alignedQuality', [])
+        """
+        The quality of the read sequence contained in this alignment
+        record   (equivalent to QUAL in SAM).    alignedSequence and
+        alignedQuality may be shorter than the full read sequence
+        and quality. This will occur if the alignment is part of a
+        chimeric alignment,   or if the read was trimmed. When this
+        occurs, the CIGAR for this read will   begin/end with a hard
+        clip operator that will indicate the length of the excised
+        sequence.
+        """
+        self.alignedSequence = kwargs.get(
+            'alignedSequence', None)
+        """
+        The bases of the read sequence contained in this alignment
+        record (equivalent   to SEQ in SAM).    alignedSequence and
+        alignedQuality may be shorter than the full read sequence
+        and quality. This will occur if the alignment is part of a
+        chimeric alignment,   or if the read was trimmed. When this
+        occurs, the CIGAR for this read will   begin/end with a hard
+        clip operator that will indicate the length of the   excised
+        sequence.
+        """
+        self.alignment = kwargs.get(
+            'alignment', None)
+        """
+        The alignment for this alignment record. This field will be
+        null if the read   is unmapped.
+        """
+        self.duplicateFragment = kwargs.get(
+            'duplicateFragment', None)
+        """
+        The fragment is a PCR or optical duplicate (SAM flag 0x400).
+        """
+        self.failedVendorQualityChecks = kwargs.get(
+            'failedVendorQualityChecks', None)
+        """
+        The read fails platform or vendor quality checks (SAM flag
+        0x200).
+        """
+        self.fragmentLength = kwargs.get(
+            'fragmentLength', None)
+        """
+        The observed length of the fragment, equivalent to TLEN in
+        SAM.
+        """
+        self.fragmentName = kwargs.get(
+            'fragmentName', None)
+        """
+        The fragment name. Equivalent to QNAME (query template name)
+        in SAM.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The read alignment ID. This ID is unique within the read group
+        this   alignment belongs to.    For performance reasons, this
+        field may be omitted by a backend.   If provided, its intended
+        use is to make caching and UI display easier for   genome
+        browsers and other lightweight clients.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional read alignment information.
+        """
+        self.nextMatePosition = kwargs.get(
+            'nextMatePosition', None)
+        """
+        The mapping of the primary alignment of the
+        (readNumber+1)%numberReads   read in the fragment. It replaces
+        mate position and mate strand in SAM.
+        """
+        self.numberReads = kwargs.get(
+            'numberReads', None)
+        """
+        The number of reads in the fragment (extension to SAM flag
+        0x1)
+        """
+        self.properPlacement = kwargs.get(
+            'properPlacement', None)
+        """
+        The orientation and the distance between reads from the
+        fragment are   consistent with the sequencing protocol
+        (equivalent to SAM flag 0x2)
+        """
+        self.readGroupId = kwargs.get(
+            'readGroupId', None)
+        """
+        The ID of the read group this read belongs to.   (Every read
+        must belong to exactly one read group.)
+        """
+        self.readNumber = kwargs.get(
+            'readNumber', None)
+        """
+        The read ordinal in the fragment, 0-based and less than
+        numberReads. This   field replaces SAM flag 0x40 and 0x80 and
+        is intended to more cleanly   represent multiple reads per
+        fragment.
+        """
+        self.secondaryAlignment = kwargs.get(
+            'secondaryAlignment', None)
+        """
+        Whether this alignment is secondary. Equivalent to SAM flag
+        0x100.   A secondary alignment represents an alternative to
+        the primary alignment   for this read. Aligners may return
+        secondary alignments if a read can map   ambiguously to
+        multiple coordinates in the genome.    By convention, each
+        read has one and only one alignment where both
+        secondaryAlignment and supplementaryAlignment are false.
+        """
+        self.supplementaryAlignment = kwargs.get(
+            'supplementaryAlignment', None)
+        """
+        Whether this alignment is supplementary. Equivalent to SAM
+        flag 0x800.   Supplementary alignments are used in the
+        representation of a chimeric   alignment. In a chimeric
+        alignment, a read is split into multiple   linear alignments
+        that map to different reference contigs. The first   linear
+        alignment in the read will be designated as the representative
+        alignment;   the remaining linear alignments will be
+        designated as supplementary alignments.   These alignments may
+        have different mapping quality scores.    In each linear
+        alignment in a chimeric alignment, the read will be hard
+        clipped.   The alignedSequence and alignedQuality fields in
+        the alignment record will   only represent the bases for its
+        respective linear alignment.
+        """
 
 
 class ReadGroup(ProtocolElement):
     """
-No documentation
+    A ReadGroup is a set of reads derived from one physical sequencing
+    process.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
@@ -1358,33 +1163,47 @@ No documentation
 "datasetId"}, {"default": null, "doc": "", "type": ["null", "string"],
 "name": "name"}, {"default": null, "doc": "", "type": ["null",
 "string"], "name": "description"}, {"doc": "", "type": ["null",
-"string"], "name": "sampleId"}, {"doc": "", "type": ["null",
-{"fields": [{"default": null, "doc": "", "type": ["null", "string"],
-"name": "libraryId"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "platformUnit"}, {"doc": "", "type": ["null",
-"string"], "name": "sequencingCenter"}, {"doc": "", "type": ["null",
-"string"], "name": "instrumentModel"}], "type": "record", "name":
-"Experiment"}], "name": "experiment"}, {"default": null, "doc": "",
+"string"], "name": "sampleId"}, {"doc": "", "type": ["null", {"doc":
+"", "type": "record", "name": "Experiment", "fields": [{"doc": "",
+"type": "string", "name": "id"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "name"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "description"}, {"doc": "",
+"type": "string", "name": "recordCreateTime"}, {"doc": "", "type":
+"string", "name": "recordUpdateTime"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "runTime"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "molecule"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"strategy"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "selection"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "library"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "libraryLayout"}, {"doc": "", "type":
+["null", "string"], "name": "instrumentModel"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "instrumentDataFile"},
+{"doc": "", "type": ["null", "string"], "name": "sequencingCenter"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"platformUnit"}, {"default": {}, "doc": "", "type": {"values":
+{"items": "string", "type": "array"}, "type": "map"}, "name":
+"info"}]}], "name": "experiment"}, {"default": null, "doc": "",
 "type": ["null", "int"], "name": "predictedInsertSize"}, {"default":
 null, "doc": "", "type": ["null", "long"], "name": "created"},
 {"default": null, "doc": "", "type": ["null", "long"], "name":
-"updated"}, {"default": null, "doc": "", "type": ["null", {"fields":
-[{"default": null, "doc": "", "type": ["null", "long"], "name":
-"alignedReadCount"}, {"default": null, "doc": "", "type": ["null",
-"long"], "name": "unalignedReadCount"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "baseCount"}], "type": "record",
-"name": "ReadStats"}], "name": "stats"}, {"default": [], "doc": "",
-"type": {"items": {"fields": [{"default": null, "doc": "", "type":
-["null", "string"], "name": "commandLine"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "id"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "name"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "prevProgramId"},
+"updated"}, {"default": null, "doc": "", "type": ["null", {"doc": "",
+"type": "record", "name": "ReadStats", "fields": [{"default": null,
+"doc": "", "type": ["null", "long"], "name": "alignedReadCount"},
+{"default": null, "doc": "", "type": ["null", "long"], "name":
+"unalignedReadCount"}, {"default": null, "doc": "", "type": ["null",
+"long"], "name": "baseCount"}]}], "name": "stats"}, {"default": [],
+"doc": "", "type": {"items": {"doc": "", "type": "record", "name":
+"Program", "fields": [{"default": null, "doc": "", "type": ["null",
+"string"], "name": "commandLine"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "id"}, {"default": null, "doc":
+"", "type": ["null", "string"], "name": "name"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "prevProgramId"},
 {"default": null, "doc": "", "type": ["null", "string"], "name":
-"version"}], "type": "record", "name": "Program"}, "type": "array"},
-"name": "programs"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "referenceSetId"}, {"default": {}, "doc": "",
-"type": {"values": {"items": "string", "type": "array"}, "type":
-"map"}, "name": "info"}]}
+"version"}]}, "type": "array"}, "name": "programs"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "referenceSetId"},
+{"default": {}, "doc": "", "type": {"values": {"items": "string",
+"type": "array"}, "type": "map"}, "name": "info"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
@@ -1409,32 +1228,95 @@ null, "doc": "", "type": ["null", "string"], "name": "prevProgramId"},
             'programs': Program,
             'stats': ReadStats,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['created', 'datasetId', 'description', 'experiment', 'id',
-                 'info', 'name', 'predictedInsertSize',
-                 'programs', 'referenceSetId', 'sampleId',
-                 'stats', 'updated']
+    __slots__ = [
+        'created', 'datasetId', 'description', 'experiment', 'id',
+        'info', 'name', 'predictedInsertSize', 'programs',
+        'referenceSetId', 'sampleId', 'stats', 'updated'
+    ]
 
-    def __init__(self):
-        self.created = None
-        self.datasetId = None
-        self.description = None
-        self.experiment = None
-        self.id = None
-        self.info = {}
-        self.name = None
-        self.predictedInsertSize = None
-        self.programs = []
-        self.referenceSetId = None
-        self.sampleId = None
-        self.stats = None
-        self.updated = None
+    def __init__(self, **kwargs):
+        self.created = kwargs.get(
+            'created', None)
+        """
+        The time at which this read group was created in milliseconds
+        from the epoch.
+        """
+        self.datasetId = kwargs.get(
+            'datasetId', None)
+        """
+        The ID of the dataset this read group belongs to.
+        """
+        self.description = kwargs.get(
+            'description', None)
+        """
+        The read group description.
+        """
+        self.experiment = kwargs.get(
+            'experiment', None)
+        """
+        The experiment used to generate this read group.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The read group ID.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional read group information.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The read group name.
+        """
+        self.predictedInsertSize = kwargs.get(
+            'predictedInsertSize', None)
+        """
+        The predicted insert size of this read group.
+        """
+        self.programs = kwargs.get(
+            'programs', [])
+        """
+        The programs used to generate this read group.
+        """
+        self.referenceSetId = kwargs.get(
+            'referenceSetId', None)
+        """
+        The ID of the reference set to which the reads in this read
+        group are aligned.   Required if there are any read
+        alignments.
+        """
+        self.sampleId = kwargs.get(
+            'sampleId', None)
+        """
+        The sample this read group's data was generated from.   Note:
+        the current API does not have a rigorous definition of sample.
+        Therefore, this   field actually contains an arbitrary string,
+        typically corresponding to the SM tag in a   BAM file.
+        """
+        self.stats = kwargs.get(
+            'stats', None)
+        """
+        Statistical data on reads in this read group.
+        """
+        self.updated = kwargs.get(
+            'updated', None)
+        """
+        The time at which this read group was last updated in
+        milliseconds   from the epoch.
+        """
 
 
 class ReadGroupSet(ProtocolElement):
     """
-No documentation
+    A ReadGroupSet is a logical collection of ReadGroups. Typically
+    one ReadGroupSet represents all the reads from one experimental
+    sample.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
@@ -1442,43 +1324,60 @@ No documentation
 "id"}, {"default": null, "doc": "", "type": ["null", "string"],
 "name": "datasetId"}, {"default": null, "doc": "", "type": ["null",
 "string"], "name": "name"}, {"default": null, "doc": "", "type":
-["null", {"fields": [{"default": null, "doc": "", "type": ["null",
-"long"], "name": "alignedReadCount"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "unalignedReadCount"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "baseCount"}],
-"type": "record", "name": "ReadStats"}], "name": "stats"}, {"default":
-[], "doc": "", "type": {"items": {"fields": [{"doc": "", "type":
+["null", {"doc": "", "type": "record", "name": "ReadStats", "fields":
+[{"default": null, "doc": "", "type": ["null", "long"], "name":
+"alignedReadCount"}, {"default": null, "doc": "", "type": ["null",
+"long"], "name": "unalignedReadCount"}, {"default": null, "doc": "",
+"type": ["null", "long"], "name": "baseCount"}]}], "name": "stats"},
+{"default": [], "doc": "", "type": {"items": {"doc": "", "type":
+"record", "name": "ReadGroup", "fields": [{"doc": "", "type":
 "string", "name": "id"}, {"default": null, "doc": "", "type": ["null",
 "string"], "name": "datasetId"}, {"default": null, "doc": "", "type":
 ["null", "string"], "name": "name"}, {"default": null, "doc": "",
 "type": ["null", "string"], "name": "description"}, {"doc": "",
 "type": ["null", "string"], "name": "sampleId"}, {"doc": "", "type":
-["null", {"fields": [{"default": null, "doc": "", "type": ["null",
-"string"], "name": "libraryId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "platformUnit"}, {"doc": "", "type":
-["null", "string"], "name": "sequencingCenter"}, {"doc": "", "type":
-["null", "string"], "name": "instrumentModel"}], "type": "record",
-"name": "Experiment"}], "name": "experiment"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "predictedInsertSize"},
-{"default": null, "doc": "", "type": ["null", "long"], "name":
-"created"}, {"default": null, "doc": "", "type": ["null", "long"],
-"name": "updated"}, {"default": null, "doc": "", "type": ["null",
-"ReadStats"], "name": "stats"}, {"default": [], "doc": "", "type":
-{"items": {"fields": [{"default": null, "doc": "", "type": ["null",
-"string"], "name": "commandLine"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "id"}, {"default": null, "doc":
+["null", {"doc": "", "type": "record", "name": "Experiment", "fields":
+[{"doc": "", "type": "string", "name": "id"}, {"default": null, "doc":
 "", "type": ["null", "string"], "name": "name"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "prevProgramId"},
+"doc": "", "type": ["null", "string"], "name": "description"}, {"doc":
+"", "type": "string", "name": "recordCreateTime"}, {"doc": "", "type":
+"string", "name": "recordUpdateTime"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "runTime"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "molecule"},
 {"default": null, "doc": "", "type": ["null", "string"], "name":
-"version"}], "type": "record", "name": "Program"}, "type": "array"},
-"name": "programs"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "referenceSetId"}, {"default": {}, "doc": "",
-"type": {"values": {"items": "string", "type": "array"}, "type":
-"map"}, "name": "info"}], "type": "record", "name": "ReadGroup"},
-"type": "array"}, "name": "readGroups"}]}
+"strategy"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "selection"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "library"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "libraryLayout"}, {"doc": "", "type":
+["null", "string"], "name": "instrumentModel"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "instrumentDataFile"},
+{"doc": "", "type": ["null", "string"], "name": "sequencingCenter"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"platformUnit"}, {"default": {}, "doc": "", "type": {"values":
+{"items": "string", "type": "array"}, "type": "map"}, "name":
+"info"}]}], "name": "experiment"}, {"default": null, "doc": "",
+"type": ["null", "int"], "name": "predictedInsertSize"}, {"default":
+null, "doc": "", "type": ["null", "long"], "name": "created"},
+{"default": null, "doc": "", "type": ["null", "long"], "name":
+"updated"}, {"default": null, "doc": "", "type": ["null",
+"ReadStats"], "name": "stats"}, {"default": [], "doc": "", "type":
+{"items": {"doc": "", "type": "record", "name": "Program", "fields":
+[{"default": null, "doc": "", "type": ["null", "string"], "name":
+"commandLine"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "id"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "name"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "prevProgramId"}, {"default":
+null, "doc": "", "type": ["null", "string"], "name": "version"}]},
+"type": "array"}, "name": "programs"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "referenceSetId"}, {"default": {},
+"doc": "", "type": {"values": {"items": "string", "type": "array"},
+"type": "map"}, "name": "info"}]}, "type": "array"}, "name":
+"readGroups"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
+    requiredFields = set([
+        "id",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -1494,28 +1393,53 @@ null, "doc": "", "type": ["null", "long"], "name": "baseCount"}],
             'readGroups': ReadGroup,
             'stats': ReadStats,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['datasetId', 'id', 'name', 'readGroups', 'stats']
+    __slots__ = [
+        'datasetId', 'id', 'name', 'readGroups', 'stats'
+    ]
 
-    def __init__(self):
-        self.datasetId = None
-        self.id = None
-        self.name = None
-        self.readGroups = []
-        self.stats = None
+    def __init__(self, **kwargs):
+        self.datasetId = kwargs.get(
+            'datasetId', None)
+        """
+        The ID of the dataset this read group set belongs to.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The read group set ID.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The read group set name.
+        """
+        self.readGroups = kwargs.get(
+            'readGroups', [])
+        """
+        The read groups in this set.
+        """
+        self.stats = kwargs.get(
+            'stats', None)
+        """
+        Statistical data on reads in this read group set.
+        """
 
 
 class ReadStats(ProtocolElement):
     """
-No documentation
+    ReadStats can be used to provide summary statistics about read
+    data.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "ReadStats", "fields": [{"default": null, "doc": "", "type": ["null",
 "long"], "name": "alignedReadCount"}, {"default": null, "doc": "",
 "type": ["null", "long"], "name": "unalignedReadCount"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "baseCount"}]}
+null, "doc": "", "type": ["null", "long"], "name": "baseCount"}],
+"doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -1528,21 +1452,38 @@ null, "doc": "", "type": ["null", "long"], "name": "baseCount"}]}
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['alignedReadCount', 'baseCount', 'unalignedReadCount']
+    __slots__ = [
+        'alignedReadCount', 'baseCount', 'unalignedReadCount'
+    ]
 
-    def __init__(self):
-        self.alignedReadCount = None
-        self.baseCount = None
-        self.unalignedReadCount = None
+    def __init__(self, **kwargs):
+        self.alignedReadCount = kwargs.get(
+            'alignedReadCount', None)
+        """
+        The number of aligned reads.
+        """
+        self.baseCount = kwargs.get(
+            'baseCount', None)
+        """
+        The total number of bases.   This is equivalent to the sum of
+        alignedSequence.length for all reads.
+        """
+        self.unalignedReadCount = kwargs.get(
+            'unalignedReadCount', None)
+        """
+        The number of unaligned reads.
+        """
 
 
 class Reference(ProtocolElement):
     """
-A `Reference` is a canonical assembled contig, intended to act as a
-reference coordinate space for other genomic annotations. A single
-`Reference` might represent the human chromosome 1, for instance.
+    A Reference is a canonical assembled contig, intended to act as a
+    reference coordinate space for other genomic annotations. A single
+    Reference might represent the human chromosome 1, for instance.
+    References are designed to be immutable.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
@@ -1574,41 +1515,97 @@ null, "doc": "", "type": ["null", "float"], "name":
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['id', 'isDerived', 'length', 'md5checksum', 'name',
-                 'ncbiTaxonId', 'sourceAccessions',
-                 'sourceDivergence', 'sourceURI']
+    __slots__ = [
+        'id', 'isDerived', 'length', 'md5checksum', 'name',
+        'ncbiTaxonId', 'sourceAccessions', 'sourceDivergence',
+        'sourceURI'
+    ]
 
-    def __init__(self):
-        self.id = None
-        self.isDerived = False
-        self.length = None
-        self.md5checksum = None
-        self.name = None
-        self.ncbiTaxonId = None
-        self.sourceAccessions = None
-        self.sourceDivergence = None
-        self.sourceURI = None
+    def __init__(self, **kwargs):
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The reference ID. Unique within the repository.
+        """
+        self.isDerived = kwargs.get(
+            'isDerived', False)
+        """
+        A sequence X is said to be derived from source sequence Y, if
+        X and Y   are of the same length and the per-base sequence
+        divergence at A/C/G/T bases   is sufficiently small. Two
+        sequences derived from the same official   sequence share the
+        same coordinates and annotations, and   can be replaced with
+        the official sequence for certain use cases.
+        """
+        self.length = kwargs.get(
+            'length', None)
+        """
+        The length of this reference's sequence.
+        """
+        self.md5checksum = kwargs.get(
+            'md5checksum', None)
+        """
+        The MD5 checksum uniquely representing this Reference as a
+        lower-case   hexadecimal string, calculated as the MD5 of the
+        upper-case sequence   excluding all whitespace characters
+        (this is equivalent to SQ:M5 in SAM).
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The name of this reference. (e.g. '22').
+        """
+        self.ncbiTaxonId = kwargs.get(
+            'ncbiTaxonId', None)
+        """
+        ID from http://www.ncbi.nlm.nih.gov/taxonomy (e.g.
+        9606->human).
+        """
+        self.sourceAccessions = kwargs.get(
+            'sourceAccessions', None)
+        """
+        All known corresponding accession IDs in INSDC
+        (GenBank/ENA/DDBJ) which must include   a version number, e.g.
+        GCF_000001405.26.
+        """
+        self.sourceDivergence = kwargs.get(
+            'sourceDivergence', None)
+        """
+        The sourceDivergence is the fraction of non-indel bases that
+        do not match the   reference this record was derived from.
+        """
+        self.sourceURI = kwargs.get(
+            'sourceURI', None)
+        """
+        The URI from which the sequence was obtained. Specifies a
+        FASTA format   file/string with one name, sequence pair. In
+        most cases, clients should call   the getReferenceBases()
+        method to obtain sequence bases for a Reference   instead of
+        attempting to retrieve this URI.
+        """
 
 
 class ReferenceSet(ProtocolElement):
     """
-A `ReferenceSet` is a set of `Reference`s which typically comprise a
-reference assembly, such as `GRCh38`. A `ReferenceSet` defines a common
-coordinate space for comparing reference-aligned experimental data.
+    A ReferenceSet is a set of References which typically comprise a
+    reference assembly, such as GRCh38. A ReferenceSet defines a
+    common coordinate space for comparing reference-aligned
+    experimental data.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "ReferenceSet", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"default": [], "doc": "", "type": {"items": "string", "type":
-"array"}, "name": "referenceIds"}, {"doc": "", "type": "string",
-"name": "md5checksum"}, {"default": null, "doc": "", "type": ["null",
-"int"], "name": "ncbiTaxonId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "description"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "assemblyId"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "sourceURI"},
-{"doc": "", "type": {"items": "string", "type": "array"}, "name":
+"id"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "name"}, {"doc": "", "type": "string", "name": "md5checksum"},
+{"default": null, "doc": "", "type": ["null", "int"], "name":
+"ncbiTaxonId"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "description"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "assemblyId"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "sourceURI"}, {"doc":
+"", "type": {"items": "string", "type": "array"}, "name":
 "sourceAccessions"}, {"default": false, "doc": "", "type": "boolean",
 "name": "isDerived"}], "doc": ""}
 """
@@ -1627,91 +1624,91 @@ null, "doc": "", "type": ["null", "string"], "name": "sourceURI"},
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['assemblyId', 'description', 'id', 'isDerived', 'md5checksum',
-                 'ncbiTaxonId', 'referenceIds',
-                 'sourceAccessions', 'sourceURI']
+    __slots__ = [
+        'assemblyId', 'description', 'id', 'isDerived', 'md5checksum',
+        'name', 'ncbiTaxonId', 'sourceAccessions', 'sourceURI'
+    ]
 
-    def __init__(self):
-        self.assemblyId = None
-        self.description = None
-        self.id = None
-        self.isDerived = False
-        self.md5checksum = None
-        self.ncbiTaxonId = None
-        self.referenceIds = []
-        self.sourceAccessions = None
-        self.sourceURI = None
+    def __init__(self, **kwargs):
+        self.assemblyId = kwargs.get(
+            'assemblyId', None)
+        """
+        Public id of this reference set, such as GRCh37.
+        """
+        self.description = kwargs.get(
+            'description', None)
+        """
+        Optional free text description of this reference set.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The reference set ID. Unique in the repository.
+        """
+        self.isDerived = kwargs.get(
+            'isDerived', False)
+        """
+        A reference set may be derived from a source if it contains
+        additional sequences, or some of the sequences within it are
+        derived   (see the definition of isDerived in Reference).
+        """
+        self.md5checksum = kwargs.get(
+            'md5checksum', None)
+        """
+        Order-independent MD5 checksum which identifies this
+        ReferenceSet.    To compute this checksum, make a list of
+        Reference.md5checksum for all   References in this set. Then
+        sort that list, and take the MD5 hash of   all the strings
+        concatenated together. Express the hash as a lower-case
+        hexadecimal string.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The reference set name.
+        """
+        self.ncbiTaxonId = kwargs.get(
+            'ncbiTaxonId', None)
+        """
+        ID from http://www.ncbi.nlm.nih.gov/taxonomy (e.g.
+        9606->human) indicating   the species which this assembly is
+        intended to model. Note that contained   References may
+        specify a different ncbiTaxonId, as assemblies may   contain
+        reference sequences which do not belong to the modeled
+        species, e.g.   EBV in a human reference genome.
+        """
+        self.sourceAccessions = kwargs.get(
+            'sourceAccessions', None)
+        """
+        All known corresponding accession IDs in INSDC
+        (GenBank/ENA/DDBJ) ideally   with a version number, e.g.
+        NC_000001.11.
+        """
+        self.sourceURI = kwargs.get(
+            'sourceURI', None)
+        """
+        Specifies a FASTA format file/string.
+        """
 
 
-class ResponseResource(ProtocolElement):
+class SearchCallSetsRequest(SearchRequest):
     """
-The response to the Beacon query
+    This request maps to the body of POST /callsets/search as JSON.
     """
     _schemaSource = """
-{"namespace": "org.ga4gh.beacon", "type": "record", "name":
-"ResponseResource", "fields": [{"doc": "", "type": "string", "name":
-"exists"}, {"default": [], "doc": "", "type": {"items": {"doc": "",
-"type": "record", "name": "AlleleResource", "fields": [{"doc": "",
-"type": "string", "name": "allele"}, {"doc": "", "type": "double",
-"name": "frequency"}]}, "type": "array"}, "name": "frequencies"},
-{"default": null, "doc": "", "type": ["null", "int"], "name":
-"observed"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "info"}, {"default": null, "doc": "", "type": ["null", {"doc":
-"", "type": "record", "name": "ErrorResource", "fields": [{"doc": "",
-"type": "string", "name": "name"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}]}], "name":
-"err"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["exists"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'err': ErrorResource,
-            'frequencies': AlleleResource,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'err': ErrorResource,
-            'frequencies': AlleleResource,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['err', 'exists', 'frequencies', 'info', 'observed']
-
-    def __init__(self):
-        self.err = None
-        self.exists = None
-        self.frequencies = []
-        self.info = None
-        self.observed = None
-
-
-class RnaQuantification(ProtocolElement):
-    """
-Top level identifying information
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh", "type": "record", "name":
-"RnaQuantification", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "name"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "description"}, {"doc": "", "type": "string",
-"name": "readGroupId"}, {"default": [], "doc": "", "type": {"items":
-"string", "type": "array"}, "name": "programIds"}, {"default": [],
-"doc": "", "type": {"items": "string", "type": "array"}, "name":
-"annotationIds"}], "doc": ""}
+{"namespace": "org.ga4gh.methods", "type": "record", "name":
+"SearchCallSetsRequest", "fields": [{"doc": "", "type": "string",
+"name": "variantSetId"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "name"}, {"default": null, "doc": "", "type":
+["null", "int"], "name": "pageSize"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
-        "id",
-        "readGroupId",
+        "variantSetId",
     ])
 
     @classmethod
@@ -1722,212 +1719,44 @@ Top level identifying information
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['annotationIds', 'description', 'id', 'name', 'programIds',
-                 'readGroupId']
+    __slots__ = [
+        'name', 'pageSize', 'pageToken', 'variantSetId'
+    ]
 
-    def __init__(self):
-        self.annotationIds = []
-        self.description = None
-        self.id = None
-        self.name = None
-        self.programIds = []
-        self.readGroupId = None
-
-
-class Sample(ProtocolElement):
-    """
-A biological sample used in an experiment. (e.g. whole blood from
-an affected individual)
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.models", "type": "record", "name": "Sample",
-"fields": [{"doc": "", "type": "string", "name": "id"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "individualId"},
-{"default": [], "doc": "", "type": {"items": "string", "type":
-"array"}, "name": "accessions"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "name"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "created"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "updated"},
-{"default": null, "doc": "", "type": ["null", "long"], "name":
-"samplingDate"}, {"default": null, "doc": "", "type": ["null",
-"long"], "name": "age"}, {"default": null, "doc": "", "type": ["null",
-{"doc": "", "type": "record", "name": "OntologyTerm", "fields":
-[{"doc": "", "type": "string", "name": "ontologySource"}, {"doc": "",
-"type": "string", "name": "id"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "name"}]}], "name": "cellType"},
-{"default": null, "doc": "", "type": ["null", "OntologyTerm"], "name":
-"cellLine"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "geocode"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "sampleType"}, {"default": null, "doc": "", "type":
-["null", "OntologyTerm"], "name": "organismPart"}, {"default": {},
-"doc": "", "type": {"values": {"items": "string", "type": "array"},
-"type": "map"}, "name": "info"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set(["id"])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'cellLine': OntologyTerm,
-            'cellType': OntologyTerm,
-            'organismPart': OntologyTerm,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'cellLine': OntologyTerm,
-            'cellType': OntologyTerm,
-            'organismPart': OntologyTerm,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['accessions', 'age', 'cellLine', 'cellType', 'created',
-                 'description', 'geocode', 'id',
-                 'individualId', 'info', 'name',
-                 'organismPart', 'sampleType', 'samplingDate',
-                 'updated']
-
-    def __init__(self):
-        self.accessions = []
-        self.age = None
-        self.cellLine = None
-        self.cellType = None
-        self.created = None
-        self.description = None
-        self.geocode = None
-        self.id = None
-        self.individualId = None
-        self.info = {}
-        self.name = None
-        self.organismPart = None
-        self.sampleType = None
-        self.samplingDate = None
-        self.updated = None
-
-
-class SearchAnalysesRequest(SearchRequest):
-    """
-This request maps to the body of `POST /analyses/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchAnalysesRequest", "fields": [{"default": null, "doc": "",
-"type": ["null", "string"], "name": "name"}, {"default": null, "doc":
-"", "type": ["null", "int"], "name": "pageSize"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "pageToken"}], "doc":
-""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['name', 'pageSize', 'pageToken']
-
-    def __init__(self):
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-
-
-class SearchAnalysesResponse(SearchResponse):
-    """
-This is the response from `POST /analyses/search` expressed as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchAnalysesResponse", "fields": [{"default": [], "doc": "",
-"type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
-"name": "Analysis", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "name"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "description"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "created"}, {"default": null, "doc":
-"", "type": ["null", "long"], "name": "updated"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "type"}, {"default":
-null, "doc": "", "type": {"items": "string", "type": "array"}, "name":
-"software"}, {"default": {}, "doc": "", "type": {"values": {"items":
-"string", "type": "array"}, "type": "map"}, "name": "info"}], "doc":
-""}, "type": "array"}, "name": "analyses"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "nextPageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-    _valueListName = "analyses"
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'analyses': Analysis,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'analyses': Analysis,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['analyses', 'nextPageToken']
-
-    def __init__(self):
-        self.analyses = []
-        self.nextPageToken = None
-
-
-class SearchCallSetsRequest(SearchRequest):
-    """
-This request maps to the body of `POST /callsets/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchCallSetsRequest", "fields": [{"default": [], "doc": "", "type":
-{"items": "string", "type": "array"}, "name": "variantSetIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "int"], "name":
-"pageSize"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "pageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['name', 'pageSize', 'pageToken', 'variantSetIds']
-
-    def __init__(self):
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-        self.variantSetIds = []
+    def __init__(self, **kwargs):
+        self.name = kwargs.get(
+            'name', None)
+        """
+        Only return call sets with this name (case-sensitive, exact
+        match).
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+        self.variantSetId = kwargs.get(
+            'variantSetId', None)
+        """
+        The VariantSet to search.
+        """
 
 
 class SearchCallSetsResponse(SearchResponse):
     """
-This is the response from `POST /callsets/search` expressed as JSON.
+    This is the response from POST /callsets/search expressed as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -1961,26 +1790,38 @@ This is the response from `POST /callsets/search` expressed as JSON.
         embeddedTypes = {
             'callSets': CallSet,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['callSets', 'nextPageToken']
+    __slots__ = [
+        'callSets', 'nextPageToken'
+    ]
 
-    def __init__(self):
-        self.callSets = []
-        self.nextPageToken = None
+    def __init__(self, **kwargs):
+        self.callSets = kwargs.get(
+            'callSets', [])
+        """
+        The list of matching call sets.
+        """
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
 
 
-class SearchExperimentsRequest(SearchRequest):
+class SearchDatasetsRequest(SearchRequest):
     """
-This request maps to the body of `POST /experiments/search` as JSON.
+    This request maps to the body of POST /datasets/search as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchExperimentsRequest", "fields": [{"default": null, "doc": "",
-"type": ["null", "string"], "name": "name"}, {"default": null, "doc":
-"", "type": ["null", "int"], "name": "pageSize"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "pageToken"}], "doc":
-""}
+"SearchDatasetsRequest", "fields": [{"default": null, "doc": "",
+"type": ["null", "int"], "name": "pageSize"}, {"default": null, "doc":
+"", "type": ["null", "string"], "name": "pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -1993,32 +1834,183 @@ This request maps to the body of `POST /experiments/search` as JSON.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['name', 'pageSize', 'pageToken']
+    __slots__ = [
+        'pageSize', 'pageToken'
+    ]
 
-    def __init__(self):
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
+    def __init__(self, **kwargs):
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
 
 
-class SearchExperimentsResponse(SearchResponse):
+class SearchDatasetsResponse(SearchResponse):
     """
-This is the response from `POST /experiments/search` expressed as JSON.
+    This is the response from POST /datasets/search expressed as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchExperimentsResponse", "fields": [{"default": [], "doc": "",
+"SearchDatasetsResponse", "fields": [{"default": [], "doc": "",
 "type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
-"name": "Experiment", "fields": [{"doc": "", "type": "string", "name":
+"name": "Dataset", "fields": [{"doc": "", "type": "string", "name":
 "id"}, {"default": null, "doc": "", "type": ["null", "string"],
 "name": "name"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "description"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "created"}, {"default": null, "doc":
-"", "type": ["null", "long"], "name": "updated"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "runDate"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "molecule"},
+"string"], "name": "description"}], "doc": ""}, "type": "array"},
+"name": "datasets"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "nextPageToken"}], "doc": ""}
+"""
+    schema = avro.schema.parse(_schemaSource)
+    requiredFields = set([])
+    _valueListName = "datasets"
+
+    @classmethod
+    def isEmbeddedType(cls, fieldName):
+        embeddedTypes = {
+            'datasets': Dataset,
+        }
+        return fieldName in embeddedTypes
+
+    @classmethod
+    def getEmbeddedType(cls, fieldName):
+        embeddedTypes = {
+            'datasets': Dataset,
+        }
+
+        return embeddedTypes[fieldName]
+
+    __slots__ = [
+        'datasets', 'nextPageToken'
+    ]
+
+    def __init__(self, **kwargs):
+        self.datasets = kwargs.get(
+            'datasets', [])
+        """
+        The list of datasets.
+        """
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+
+
+class SearchReadGroupSetsRequest(SearchRequest):
+    """
+    This request maps to the body of POST /readgroupsets/search as
+    JSON.  TODO: Factor this out to a common API patterns section. -
+    If searching by a resource ID, and that resource is not found, the
+    method will return a 404 HTTP status code (NOT_FOUND). - If
+    searching by other attributes, e.g. name, and no matches are
+    found, the method will return a 200 HTTP status code (OK) with an
+    empty result list.
+    """
+    _schemaSource = """
+{"namespace": "org.ga4gh.methods", "type": "record", "name":
+"SearchReadGroupSetsRequest", "fields": [{"doc": "", "type": "string",
+"name": "datasetId"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "name"}, {"default": null, "doc": "", "type":
+["null", "int"], "name": "pageSize"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "pageToken"}], "doc": ""}
+"""
+    schema = avro.schema.parse(_schemaSource)
+    requiredFields = set([
+        "datasetId",
+    ])
+
+    @classmethod
+    def isEmbeddedType(cls, fieldName):
+        embeddedTypes = {}
+        return fieldName in embeddedTypes
+
+    @classmethod
+    def getEmbeddedType(cls, fieldName):
+        embeddedTypes = {}
+
+        return embeddedTypes[fieldName]
+
+    __slots__ = [
+        'datasetId', 'name', 'pageSize', 'pageToken'
+    ]
+
+    def __init__(self, **kwargs):
+        self.datasetId = kwargs.get(
+            'datasetId', None)
+        """
+        The dataset to search.
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        Only return read group sets with this name (case-sensitive,
+        exact match).
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+
+
+class SearchReadGroupSetsResponse(SearchResponse):
+    """
+    This is the response from POST /readgroupsets/search expressed as
+    JSON.
+    """
+    _schemaSource = """
+{"namespace": "org.ga4gh.methods", "type": "record", "name":
+"SearchReadGroupSetsResponse", "fields": [{"default": [], "doc": "",
+"type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
+"name": "ReadGroupSet", "fields": [{"doc": "", "type": "string",
+"name": "id"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "datasetId"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "name"}, {"default": null, "doc": "",
+"type": ["null", {"doc": "", "type": "record", "name": "ReadStats",
+"fields": [{"default": null, "doc": "", "type": ["null", "long"],
+"name": "alignedReadCount"}, {"default": null, "doc": "", "type":
+["null", "long"], "name": "unalignedReadCount"}, {"default": null,
+"doc": "", "type": ["null", "long"], "name": "baseCount"}]}], "name":
+"stats"}, {"default": [], "doc": "", "type": {"items": {"doc": "",
+"type": "record", "name": "ReadGroup", "fields": [{"doc": "", "type":
+"string", "name": "id"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "datasetId"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "name"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "description"}, {"doc": "",
+"type": ["null", "string"], "name": "sampleId"}, {"doc": "", "type":
+["null", {"doc": "", "type": "record", "name": "Experiment", "fields":
+[{"doc": "", "type": "string", "name": "id"}, {"default": null, "doc":
+"", "type": ["null", "string"], "name": "name"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "description"}, {"doc":
+"", "type": "string", "name": "recordCreateTime"}, {"doc": "", "type":
+"string", "name": "recordUpdateTime"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "runTime"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "molecule"},
 {"default": null, "doc": "", "type": ["null", "string"], "name":
 "strategy"}, {"default": null, "doc": "", "type": ["null", "string"],
 "name": "selection"}, {"default": null, "doc": "", "type": ["null",
@@ -2030,294 +2022,26 @@ null, "doc": "", "type": ["null", "string"], "name": "molecule"},
 {"default": null, "doc": "", "type": ["null", "string"], "name":
 "platformUnit"}, {"default": {}, "doc": "", "type": {"values":
 {"items": "string", "type": "array"}, "type": "map"}, "name":
-"info"}], "doc": ""}, "type": "array"}, "name": "experiments"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"nextPageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-    _valueListName = "experiments"
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'experiments': Experiment,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'experiments': Experiment,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['experiments', 'nextPageToken']
-
-    def __init__(self):
-        self.experiments = []
-        self.nextPageToken = None
-
-
-class SearchIndividualGroupsRequest(SearchRequest):
-    """
-This request maps to the body of `POST /individualgroups/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchIndividualGroupsRequest", "fields": [{"default": null, "doc":
-"", "type": ["null", "string"], "name": "name"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "pageSize"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "pageToken"}],
-"doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['name', 'pageSize', 'pageToken']
-
-    def __init__(self):
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-
-
-class SearchIndividualGroupsResponse(SearchResponse):
-    """
-This is the response from `POST /individualgroups/search` expressed as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchIndividualGroupsResponse", "fields": [{"default": [], "doc":
-"", "type": {"items": {"namespace": "org.ga4gh.models", "type":
-"record", "name": "IndividualGroup", "fields": [{"doc": "", "type":
-"string", "name": "id"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "name"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "description"}, {"default": null, "doc":
-"", "type": ["null", "long"], "name": "created"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "updated"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "type"},
-{"default": {}, "doc": "", "type": {"values": {"items": "string",
-"type": "array"}, "type": "map"}, "name": "info"}], "doc": ""},
-"type": "array"}, "name": "individualGroups"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "nextPageToken"}],
-"doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-    _valueListName = "individualGroups"
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'individualGroups': IndividualGroup,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'individualGroups': IndividualGroup,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['individualGroups', 'nextPageToken']
-
-    def __init__(self):
-        self.individualGroups = []
-        self.nextPageToken = None
-
-
-class SearchIndividualsRequest(SearchRequest):
-    """
-This request maps to the body of `POST /individuals/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchIndividualsRequest", "fields": [{"default": [], "doc": "",
-"type": {"items": "string", "type": "array"}, "name": "groupIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "int"], "name":
-"pageSize"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "pageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['groupIds', 'name', 'pageSize', 'pageToken']
-
-    def __init__(self):
-        self.groupIds = []
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-
-
-class SearchIndividualsResponse(SearchResponse):
-    """
-This is the response from `POST /individuals/search` expressed as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchIndividualsResponse", "fields": [{"default": [], "doc": "",
-"type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
-"name": "Individual", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"default": [], "doc": "", "type": {"items": "string", "type":
-"array"}, "name": "groupIds"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "name"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "created"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "updated"},
-{"default": null, "doc": "", "type": ["null", {"doc": "", "type":
-"record", "name": "OntologyTerm", "fields": [{"doc": "", "type":
-"string", "name": "ontologySource"}, {"doc": "", "type": "string",
-"name": "id"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "name"}]}], "name": "species"}, {"default": null,
-"doc": "", "type": {"symbols": ["FEMALE", "MALE", "OTHER",
-"MIXED_SAMPLE", "NOT_APPLICABLE"], "doc": "", "type": "enum", "name":
-"GeneticSex"}, "name": "sex"}, {"default": null, "doc": "", "type":
-["null", "OntologyTerm"], "name": "developmentalStage"}, {"default":
-null, "doc": "", "type": ["null", "long"], "name": "dateOfBirth"},
-{"default": [], "doc": "", "type": {"items": "OntologyTerm", "type":
-"array"}, "name": "diseases"}, {"default": [], "doc": "", "type":
-{"items": "OntologyTerm", "type": "array"}, "name": "phenotypes"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"stagingSystem"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "clinicalTreatment"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "strain"}, {"default": {}, "doc":
-"", "type": {"values": {"items": "string", "type": "array"}, "type":
-"map"}, "name": "info"}], "doc": ""}, "type": "array"}, "name":
-"individuals"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "nextPageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-    _valueListName = "individuals"
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'individuals': Individual,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'individuals': Individual,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['individuals', 'nextPageToken']
-
-    def __init__(self):
-        self.individuals = []
-        self.nextPageToken = None
-
-
-class SearchReadGroupSetsRequest(SearchRequest):
-    """
-This request maps to the body of `POST /readgroupsets/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchReadGroupSetsRequest", "fields": [{"default": [], "doc": "",
-"type": {"items": "string", "type": "array"}, "name": "datasetIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "int"], "name":
-"pageSize"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "pageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['datasetIds', 'name', 'pageSize', 'pageToken']
-
-    def __init__(self):
-        self.datasetIds = []
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-
-
-class SearchReadGroupSetsResponse(SearchResponse):
-    """
-This is the response from `POST /readgroupsets/search` expressed as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchReadGroupSetsResponse", "fields": [{"default": [], "doc": "",
-"type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
-"name": "ReadGroupSet", "fields": [{"doc": "", "type": "string",
-"name": "id"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "datasetId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "name"}, {"default": null, "doc": "",
-"type": ["null", {"fields": [{"default": null, "doc": "", "type":
-["null", "long"], "name": "alignedReadCount"}, {"default": null,
-"doc": "", "type": ["null", "long"], "name": "unalignedReadCount"},
+"info"}]}], "name": "experiment"}, {"default": null, "doc": "",
+"type": ["null", "int"], "name": "predictedInsertSize"}, {"default":
+null, "doc": "", "type": ["null", "long"], "name": "created"},
 {"default": null, "doc": "", "type": ["null", "long"], "name":
-"baseCount"}], "type": "record", "name": "ReadStats"}], "name":
-"stats"}, {"default": [], "doc": "", "type": {"items": {"fields":
-[{"doc": "", "type": "string", "name": "id"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "datasetId"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "name"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"description"}, {"doc": "", "type": ["null", "string"], "name":
-"sampleId"}, {"doc": "", "type": ["null", {"fields": [{"default":
-null, "doc": "", "type": ["null", "string"], "name": "libraryId"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"platformUnit"}, {"doc": "", "type": ["null", "string"], "name":
-"sequencingCenter"}, {"doc": "", "type": ["null", "string"], "name":
-"instrumentModel"}], "type": "record", "name": "Experiment"}], "name":
-"experiment"}, {"default": null, "doc": "", "type": ["null", "int"],
-"name": "predictedInsertSize"}, {"default": null, "doc": "", "type":
-["null", "long"], "name": "created"}, {"default": null, "doc": "",
-"type": ["null", "long"], "name": "updated"}, {"default": null, "doc":
-"", "type": ["null", "ReadStats"], "name": "stats"}, {"default": [],
-"doc": "", "type": {"items": {"fields": [{"default": null, "doc": "",
-"type": ["null", "string"], "name": "commandLine"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "id"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "name"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"prevProgramId"}, {"default": null, "doc": "", "type": ["null",
-"string"], "name": "version"}], "type": "record", "name": "Program"},
+"updated"}, {"default": null, "doc": "", "type": ["null",
+"ReadStats"], "name": "stats"}, {"default": [], "doc": "", "type":
+{"items": {"doc": "", "type": "record", "name": "Program", "fields":
+[{"default": null, "doc": "", "type": ["null", "string"], "name":
+"commandLine"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "id"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "name"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "prevProgramId"}, {"default":
+null, "doc": "", "type": ["null", "string"], "name": "version"}]},
 "type": "array"}, "name": "programs"}, {"default": null, "doc": "",
 "type": ["null", "string"], "name": "referenceSetId"}, {"default": {},
 "doc": "", "type": {"values": {"items": "string", "type": "array"},
-"type": "map"}, "name": "info"}], "type": "record", "name":
-"ReadGroup"}, "type": "array"}, "name": "readGroups"}]}, "type":
-"array"}, "name": "readGroupSets"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "nextPageToken"}], "doc": ""}
+"type": "map"}, "name": "info"}]}, "type": "array"}, "name":
+"readGroups"}], "doc": ""}, "type": "array"}, "name":
+"readGroupSets"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "nextPageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -2335,36 +2059,52 @@ null, "doc": "", "type": ["null", "string"], "name": "name"},
         embeddedTypes = {
             'readGroupSets': ReadGroupSet,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['nextPageToken', 'readGroupSets']
+    __slots__ = [
+        'nextPageToken', 'readGroupSets'
+    ]
 
-    def __init__(self):
-        self.nextPageToken = None
-        self.readGroupSets = []
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.readGroupSets = kwargs.get(
+            'readGroupSets', [])
+        """
+        The list of matching read group sets.
+        """
 
 
 class SearchReadsRequest(SearchRequest):
     """
-This request maps to the body of `POST /reads/search` as JSON.
-
-If a reference is specified, all queried `ReadGroup`s must be aligned
-to `ReferenceSet`s containing that same `Reference`. If no reference is
-specified, all `ReadGroup`s must be aligned to the same `ReferenceSet`.
+    This request maps to the body of POST /reads/search as JSON.  If a
+    reference is specified, all queried ReadGroups must be aligned to
+    ReferenceSets containing that same Reference. If no reference is
+    specified, all queried ReadGroups must be aligned to the same
+    ReferenceSet.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchReadsRequest", "fields": [{"default": [], "doc": "", "type":
-{"items": "string", "type": "array"}, "name": "readGroupIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"referenceId"}, {"default": 0, "doc": "", "type": ["long", "null"],
-"name": "start"}, {"default": null, "doc": "", "type": ["null",
-"long"], "name": "end"}, {"default": null, "doc": "", "type": ["null",
-"int"], "name": "pageSize"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "pageToken"}], "doc": ""}
+"SearchReadsRequest", "fields": [{"doc": "", "type": {"items":
+"string", "type": "array"}, "name": "readGroupIds"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "referenceId"},
+{"default": null, "doc": "", "type": ["null", "long"], "name":
+"start"}, {"default": null, "doc": "", "type": ["null", "long"],
+"name": "end"}, {"default": null, "doc": "", "type": ["null", "int"],
+"name": "pageSize"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
+    requiredFields = set([
+        "readGroupIds",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -2374,23 +2114,62 @@ specified, all `ReadGroup`s must be aligned to the same `ReferenceSet`.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['end', 'pageSize', 'pageToken', 'readGroupIds', 'referenceId',
-                 'start']
+    __slots__ = [
+        'end', 'pageSize', 'pageToken', 'readGroupIds', 'referenceId',
+        'start'
+    ]
 
-    def __init__(self):
-        self.end = None
-        self.pageSize = None
-        self.pageToken = None
-        self.readGroupIds = []
-        self.referenceId = None
-        self.start = 0
+    def __init__(self, **kwargs):
+        self.end = kwargs.get(
+            'end', None)
+        """
+        The end position (0-based, exclusive) of this query.   If a
+        reference is specified, this defaults to the   reference's
+        length.
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+        self.readGroupIds = kwargs.get(
+            'readGroupIds', None)
+        """
+        The ReadGroups to search. At least one id must be specified.
+        """
+        self.referenceId = kwargs.get(
+            'referenceId', None)
+        """
+        The reference to query. Leaving blank returns results from all
+        references, including unmapped reads - this could be very
+        large.
+        """
+        self.start = kwargs.get(
+            'start', None)
+        """
+        The start position (0-based) of this query.   If a reference
+        is specified, this defaults to 0.   Genomic positions are non-
+        negative integers less than reference length.   Requests
+        spanning the join of circular genomes are represented as   two
+        requests one on each side of the join (position 0).
+        """
 
 
 class SearchReadsResponse(SearchResponse):
     """
-This is the response from `POST /reads/search` expressed as JSON.
+    This is the response from POST /reads/search expressed as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -2399,33 +2178,32 @@ This is the response from `POST /reads/search` expressed as JSON.
 "ReadAlignment", "fields": [{"doc": "", "type": ["null", "string"],
 "name": "id"}, {"doc": "", "type": "string", "name": "readGroupId"},
 {"doc": "", "type": "string", "name": "fragmentName"}, {"default":
-false, "doc": "", "type": ["boolean", "null"], "name":
-"properPlacement"}, {"default": false, "doc": "", "type": ["boolean",
-"null"], "name": "duplicateFragment"}, {"default": null, "doc": "",
+null, "doc": "", "type": ["null", "boolean"], "name":
+"properPlacement"}, {"default": null, "doc": "", "type": ["null",
+"boolean"], "name": "duplicateFragment"}, {"default": null, "doc": "",
 "type": ["null", "int"], "name": "numberReads"}, {"default": null,
 "doc": "", "type": ["null", "int"], "name": "fragmentLength"},
 {"default": null, "doc": "", "type": ["null", "int"], "name":
-"readNumber"}, {"default": false, "doc": "", "type": ["boolean",
-"null"], "name": "failedVendorQualityChecks"}, {"default": null,
+"readNumber"}, {"default": null, "doc": "", "type": ["null",
+"boolean"], "name": "failedVendorQualityChecks"}, {"default": null,
 "doc": "", "type": ["null", {"doc": "", "type": "record", "name":
 "LinearAlignment", "fields": [{"doc": "", "type": {"doc": "", "type":
 "record", "name": "Position", "fields": [{"doc": "", "type": "string",
 "name": "referenceName"}, {"doc": "", "type": "long", "name":
-"position"}, {"doc": "", "type": {"symbols": ["POS_STRAND",
-"NEG_STRAND", "NO_STRAND"], "doc": "", "type": "enum", "name":
-"Strand"}, "name": "strand"}]}, "name": "position"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "mappingQuality"},
-{"default": [], "doc": "", "type": {"items": {"doc": "", "type":
-"record", "name": "CigarUnit", "fields": [{"doc": "", "type":
-{"symbols": ["ALIGNMENT_MATCH", "INSERT", "DELETE", "SKIP",
-"CLIP_SOFT", "CLIP_HARD", "PAD", "SEQUENCE_MATCH",
-"SEQUENCE_MISMATCH"], "doc": "", "type": "enum", "name":
-"CigarOperation"}, "name": "operation"}, {"doc": "", "type": "long",
-"name": "operationLength"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "referenceSequence"}]}, "type": "array"},
-"name": "cigar"}]}], "name": "alignment"}, {"default": false, "doc":
-"", "type": ["boolean", "null"], "name": "secondaryAlignment"},
-{"default": false, "doc": "", "type": ["boolean", "null"], "name":
+"position"}, {"doc": "", "type": {"symbols": ["NEG_STRAND",
+"POS_STRAND"], "doc": "", "type": "enum", "name": "Strand"}, "name":
+"strand"}]}, "name": "position"}, {"default": null, "doc": "", "type":
+["null", "int"], "name": "mappingQuality"}, {"default": [], "doc": "",
+"type": {"items": {"doc": "", "type": "record", "name": "CigarUnit",
+"fields": [{"doc": "", "type": {"symbols": ["ALIGNMENT_MATCH",
+"INSERT", "DELETE", "SKIP", "CLIP_SOFT", "CLIP_HARD", "PAD",
+"SEQUENCE_MATCH", "SEQUENCE_MISMATCH"], "doc": "", "type": "enum",
+"name": "CigarOperation"}, "name": "operation"}, {"doc": "", "type":
+"long", "name": "operationLength"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "referenceSequence"}]}, "type":
+"array"}, "name": "cigar"}]}], "name": "alignment"}, {"default": null,
+"doc": "", "type": ["null", "boolean"], "name": "secondaryAlignment"},
+{"default": null, "doc": "", "type": ["null", "boolean"], "name":
 "supplementaryAlignment"}, {"default": null, "doc": "", "type":
 ["null", "string"], "name": "alignedSequence"}, {"default": [], "doc":
 "", "type": {"items": "int", "type": "array"}, "name":
@@ -2452,30 +2230,44 @@ false, "doc": "", "type": ["boolean", "null"], "name":
         embeddedTypes = {
             'alignments': ReadAlignment,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['alignments', 'nextPageToken']
+    __slots__ = [
+        'alignments', 'nextPageToken'
+    ]
 
-    def __init__(self):
-        self.alignments = []
-        self.nextPageToken = None
+    def __init__(self, **kwargs):
+        self.alignments = kwargs.get(
+            'alignments', [])
+        """
+        The list of matching alignment records, sorted by position.
+        Unmapped reads, which have no position, are returned last.
+        """
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
 
 
 class SearchReferenceSetsRequest(SearchRequest):
     """
-This request maps to the body of `POST /referencesets/search`
-as JSON.
+    This request maps to the body of POST /referencesets/search as
+    JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchReferenceSetsRequest", "fields": [{"default": [], "doc": "",
-"type": {"items": "string", "type": "array"}, "name": "md5checksums"},
-{"default": [], "doc": "", "type": {"items": "string", "type":
-"array"}, "name": "accessions"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "assemblyId"}, {"default": null, "doc":
-"", "type": ["null", "int"], "name": "pageSize"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "pageToken"}], "doc":
-""}
+"SearchReferenceSetsRequest", "fields": [{"default": null, "doc": "",
+"type": ["null", "string"], "name": "md5checksum"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "accession"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"assemblyId"}, {"default": null, "doc": "", "type": ["null", "int"],
+"name": "pageSize"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -2488,41 +2280,73 @@ as JSON.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['accessions', 'assemblyId', 'md5checksums', 'pageSize',
-                 'pageToken']
+    __slots__ = [
+        'accession', 'assemblyId', 'md5checksum', 'pageSize',
+        'pageToken'
+    ]
 
-    def __init__(self):
-        self.accessions = []
-        self.assemblyId = None
-        self.md5checksums = []
-        self.pageSize = None
-        self.pageToken = None
+    def __init__(self, **kwargs):
+        self.accession = kwargs.get(
+            'accession', None)
+        """
+        If not null, return the reference sets for which the accession
+        matches this string (case-sensitive, exact match).
+        """
+        self.assemblyId = kwargs.get(
+            'assemblyId', None)
+        """
+        If not null, return the reference sets for which the
+        assemblyId   matches this string (case-sensitive, exact
+        match).
+        """
+        self.md5checksum = kwargs.get(
+            'md5checksum', None)
+        """
+        If not null, return the reference sets for which the
+        md5checksum matches this string (case-sensitive, exact match).
+        See ReferenceSet::md5checksum for details.
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
 
 
 class SearchReferenceSetsResponse(SearchResponse):
     """
-This is the response from `POST /referencesets/search`
-expressed as JSON.
+    This is the response from POST /referencesets/search expressed as
+    JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
 "SearchReferenceSetsResponse", "fields": [{"default": [], "doc": "",
 "type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
 "name": "ReferenceSet", "fields": [{"doc": "", "type": "string",
-"name": "id"}, {"default": [], "doc": "", "type": {"items": "string",
-"type": "array"}, "name": "referenceIds"}, {"doc": "", "type":
-"string", "name": "md5checksum"}, {"default": null, "doc": "", "type":
-["null", "int"], "name": "ncbiTaxonId"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "description"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "assemblyId"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"sourceURI"}, {"doc": "", "type": {"items": "string", "type":
-"array"}, "name": "sourceAccessions"}, {"default": false, "doc": "",
-"type": "boolean", "name": "isDerived"}], "doc": ""}, "type":
-"array"}, "name": "referenceSets"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "nextPageToken"}], "doc": ""}
+"name": "id"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "name"}, {"doc": "", "type": "string", "name":
+"md5checksum"}, {"default": null, "doc": "", "type": ["null", "int"],
+"name": "ncbiTaxonId"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "description"}, {"default": null, "doc": "",
+"type": ["null", "string"], "name": "assemblyId"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "sourceURI"}, {"doc":
+"", "type": {"items": "string", "type": "array"}, "name":
+"sourceAccessions"}, {"default": false, "doc": "", "type": "boolean",
+"name": "isDerived"}], "doc": ""}, "type": "array"}, "name":
+"referenceSets"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "nextPageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([])
@@ -2540,33 +2364,47 @@ expressed as JSON.
         embeddedTypes = {
             'referenceSets': ReferenceSet,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['nextPageToken', 'referenceSets']
+    __slots__ = [
+        'nextPageToken', 'referenceSets'
+    ]
 
-    def __init__(self):
-        self.nextPageToken = None
-        self.referenceSets = []
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.referenceSets = kwargs.get(
+            'referenceSets', [])
+        """
+        The list of matching reference sets.
+        """
 
 
 class SearchReferencesRequest(SearchRequest):
     """
-This request maps to the body of `POST /references/search`
-as JSON.
+    This request maps to the body of POST /references/search as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchReferencesRequest", "fields": [{"default": null, "doc": "",
-"type": ["null", "string"], "name": "referenceSetId"}, {"default": [],
-"doc": "", "type": {"items": "string", "type": "array"}, "name":
-"md5checksums"}, {"default": [], "doc": "", "type": {"items":
-"string", "type": "array"}, "name": "accessions"}, {"default": null,
-"doc": "", "type": ["null", "int"], "name": "pageSize"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "pageToken"}],
-"doc": ""}
+"SearchReferencesRequest", "fields": [{"doc": "", "type": "string",
+"name": "referenceSetId"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "md5checksum"}, {"default": null, "doc":
+"", "type": ["null", "string"], "name": "accession"}, {"default":
+null, "doc": "", "type": ["null", "int"], "name": "pageSize"},
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
+    requiredFields = set([
+        "referenceSetId",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -2576,22 +2414,53 @@ null, "doc": "", "type": ["null", "string"], "name": "pageToken"}],
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['accessions', 'md5checksums', 'pageSize', 'pageToken',
-                 'referenceSetId']
+    __slots__ = [
+        'accession', 'md5checksum', 'pageSize', 'pageToken',
+        'referenceSetId'
+    ]
 
-    def __init__(self):
-        self.accessions = []
-        self.md5checksums = []
-        self.pageSize = None
-        self.pageToken = None
-        self.referenceSetId = None
+    def __init__(self, **kwargs):
+        self.accession = kwargs.get(
+            'accession', None)
+        """
+        If not null, return the references for which the accession
+        matches this string (case-sensitive, exact match).
+        """
+        self.md5checksum = kwargs.get(
+            'md5checksum', None)
+        """
+        If not null, return the references for which the   md5checksum
+        matches this string (case-sensitive, exact match).   See
+        ReferenceSet::md5checksum for details.
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+        self.referenceSetId = kwargs.get(
+            'referenceSetId', None)
+        """
+        The ReferenceSet to search.
+        """
 
 
 class SearchReferencesResponse(SearchResponse):
     """
-This is the response from `POST /references/search` expressed as JSON.
+    This is the response from POST /references/search expressed as
+    JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -2626,123 +2495,44 @@ This is the response from `POST /references/search` expressed as JSON.
         embeddedTypes = {
             'references': Reference,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['nextPageToken', 'references']
+    __slots__ = [
+        'nextPageToken', 'references'
+    ]
 
-    def __init__(self):
-        self.nextPageToken = None
-        self.references = []
-
-
-class SearchSamplesRequest(SearchRequest):
-    """
-This request maps to the body of `POST /samples/search` as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchSamplesRequest", "fields": [{"default": [], "doc": "", "type":
-{"items": "string", "type": "array"}, "name": "individualIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"name"}, {"default": null, "doc": "", "type": ["null", "int"], "name":
-"pageSize"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "pageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {}
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['individualIds', 'name', 'pageSize', 'pageToken']
-
-    def __init__(self):
-        self.individualIds = []
-        self.name = None
-        self.pageSize = None
-        self.pageToken = None
-
-
-class SearchSamplesResponse(SearchResponse):
-    """
-This is the response from `POST /samples/search` expressed as JSON.
-    """
-    _schemaSource = """
-{"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchSamplesResponse", "fields": [{"default": [], "doc": "", "type":
-{"items": {"namespace": "org.ga4gh.models", "type": "record", "name":
-"Sample", "fields": [{"doc": "", "type": "string", "name": "id"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"individualId"}, {"default": [], "doc": "", "type": {"items":
-"string", "type": "array"}, "name": "accessions"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "name"}, {"default":
-null, "doc": "", "type": ["null", "string"], "name": "description"},
-{"default": null, "doc": "", "type": ["null", "long"], "name":
-"created"}, {"default": null, "doc": "", "type": ["null", "long"],
-"name": "updated"}, {"default": null, "doc": "", "type": ["null",
-"long"], "name": "samplingDate"}, {"default": null, "doc": "", "type":
-["null", "long"], "name": "age"}, {"default": null, "doc": "", "type":
-["null", {"doc": "", "type": "record", "name": "OntologyTerm",
-"fields": [{"doc": "", "type": "string", "name": "ontologySource"},
-{"doc": "", "type": "string", "name": "id"}, {"default": null, "doc":
-"", "type": ["null", "string"], "name": "name"}]}], "name":
-"cellType"}, {"default": null, "doc": "", "type": ["null",
-"OntologyTerm"], "name": "cellLine"}, {"default": null, "doc": "",
-"type": ["null", "string"], "name": "geocode"}, {"default": null,
-"doc": "", "type": ["null", "string"], "name": "sampleType"},
-{"default": null, "doc": "", "type": ["null", "OntologyTerm"], "name":
-"organismPart"}, {"default": {}, "doc": "", "type": {"values":
-{"items": "string", "type": "array"}, "type": "map"}, "name":
-"info"}], "doc": ""}, "type": "array"}, "name": "samples"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"nextPageToken"}], "doc": ""}
-"""
-    schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
-    _valueListName = "samples"
-
-    @classmethod
-    def isEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'samples': Sample,
-        }
-        return fieldName in embeddedTypes
-
-    @classmethod
-    def getEmbeddedType(cls, fieldName):
-        embeddedTypes = {
-            'samples': Sample,
-        }
-        return embeddedTypes[fieldName]
-
-    __slots__ = ['nextPageToken', 'samples']
-
-    def __init__(self):
-        self.nextPageToken = None
-        self.samples = []
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.references = kwargs.get(
+            'references', [])
+        """
+        The list of matching references.
+        """
 
 
 class SearchVariantSetsRequest(SearchRequest):
     """
-This request maps to the body of `POST /variantsets/search` as JSON.
+    This request maps to the body of POST /variantsets/search as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchVariantSetsRequest", "fields": [{"default": [], "doc": "",
-"type": {"items": "string", "type": "array"}, "name": "datasetIds"},
-{"default": null, "doc": "", "type": ["null", "int"], "name":
-"pageSize"}, {"default": null, "doc": "", "type": ["null", "string"],
-"name": "pageToken"}], "doc": ""}
+"SearchVariantSetsRequest", "fields": [{"doc": "", "type": "string",
+"name": "datasetId"}, {"default": null, "doc": "", "type": ["null",
+"int"], "name": "pageSize"}, {"default": null, "doc": "", "type":
+["null", "string"], "name": "pageToken"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
-    requiredFields = set([])
+    requiredFields = set([
+        "datasetId",
+    ])
 
     @classmethod
     def isEmbeddedType(cls, fieldName):
@@ -2752,28 +2542,49 @@ This request maps to the body of `POST /variantsets/search` as JSON.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['datasetIds', 'pageSize', 'pageToken']
+    __slots__ = [
+        'datasetId', 'pageSize', 'pageToken'
+    ]
 
-    def __init__(self):
-        self.datasetIds = []
-        self.pageSize = None
-        self.pageToken = None
+    def __init__(self, **kwargs):
+        self.datasetId = kwargs.get(
+            'datasetId', None)
+        """
+        The Dataset to search.
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
 
 
 class SearchVariantSetsResponse(SearchResponse):
     """
-This is the response from `POST /variantsets/search` expressed as JSON.
+    This is the response from POST /variantsets/search expressed as
+    JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
 "SearchVariantSetsResponse", "fields": [{"default": [], "doc": "",
 "type": {"items": {"namespace": "org.ga4gh.models", "type": "record",
 "name": "VariantSet", "fields": [{"doc": "", "type": "string", "name":
-"id"}, {"doc": "", "type": "string", "name": "datasetId"}, {"doc": "",
-"type": "string", "name": "referenceSetId"}, {"default": [], "doc":
-"", "type": {"items": {"doc": "", "type": "record", "name":
+"id"}, {"default": null, "doc": "", "type": ["null", "string"],
+"name": "name"}, {"doc": "", "type": "string", "name": "datasetId"},
+{"doc": "", "type": "string", "name": "referenceSetId"}, {"default":
+[], "doc": "", "type": {"items": {"doc": "", "type": "record", "name":
 "VariantSetMetadata", "fields": [{"doc": "", "type": "string", "name":
 "key"}, {"doc": "", "type": "string", "name": "value"}, {"doc": "",
 "type": "string", "name": "id"}, {"doc": "", "type": "string", "name":
@@ -2801,25 +2612,37 @@ null, "doc": "", "type": ["null", "string"], "name":
         embeddedTypes = {
             'variantSets': VariantSet,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['nextPageToken', 'variantSets']
+    __slots__ = [
+        'nextPageToken', 'variantSets'
+    ]
 
-    def __init__(self):
-        self.nextPageToken = None
-        self.variantSets = []
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.variantSets = kwargs.get(
+            'variantSets', [])
+        """
+        The list of matching variant sets.
+        """
 
 
 class SearchVariantsRequest(SearchRequest):
     """
-This request maps to the body of `POST /variants/search` as JSON.
+    This request maps to the body of POST /variants/search as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
-"SearchVariantsRequest", "fields": [{"default": [], "doc": "", "type":
-{"items": "string", "type": "array"}, "name": "variantSetIds"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"variantName"}, {"default": null, "doc": "", "type": ["null",
+"SearchVariantsRequest", "fields": [{"doc": "", "type": "string",
+"name": "variantSetId"}, {"default": null, "doc": "", "type": ["null",
 {"items": "string", "type": "array"}], "name": "callSetIds"}, {"doc":
 "", "type": "string", "name": "referenceName"}, {"doc": "", "type":
 "long", "name": "start"}, {"doc": "", "type": "long", "name": "end"},
@@ -2832,6 +2655,7 @@ This request maps to the body of `POST /variants/search` as JSON.
         "end",
         "referenceName",
         "start",
+        "variantSetId",
     ])
 
     @classmethod
@@ -2842,25 +2666,67 @@ This request maps to the body of `POST /variants/search` as JSON.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['callSetIds', 'end', 'pageSize', 'pageToken', 'referenceName',
-                 'start', 'variantName', 'variantSetIds']
+    __slots__ = [
+        'callSetIds', 'end', 'pageSize', 'pageToken', 'referenceName',
+        'start', 'variantSetId'
+    ]
 
-    def __init__(self):
-        self.callSetIds = None
-        self.end = None
-        self.pageSize = None
-        self.pageToken = None
-        self.referenceName = None
-        self.start = None
-        self.variantName = None
-        self.variantSetIds = []
+    def __init__(self, **kwargs):
+        self.callSetIds = kwargs.get(
+            'callSetIds', None)
+        """
+        Only return variant calls which belong to call sets with these
+        IDs.   If an empty array, returns variants without any call
+        objects.   If null, returns all variant calls.
+        """
+        self.end = kwargs.get(
+            'end', None)
+        """
+        Required. The end of the window (0-based, exclusive) for which
+        overlapping   variants should be returned.
+        """
+        self.pageSize = kwargs.get(
+            'pageSize', None)
+        """
+        Specifies the maximum number of results to return in a single
+        page.   If unspecified, a system default will be used.
+        """
+        self.pageToken = kwargs.get(
+            'pageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   To get the next page of results, set this
+        parameter to the value of   nextPageToken from the previous
+        response.
+        """
+        self.referenceName = kwargs.get(
+            'referenceName', None)
+        """
+        Required. Only return variants on this reference.
+        """
+        self.start = kwargs.get(
+            'start', None)
+        """
+        Required. The beginning of the window (0-based, inclusive) for
+        which overlapping variants should be returned.   Genomic
+        positions are non-negative integers less than reference
+        length.   Requests spanning the join of circular genomes are
+        represented as   two requests one on each side of the join
+        (position 0).
+        """
+        self.variantSetId = kwargs.get(
+            'variantSetId', None)
+        """
+        The VariantSet to search.
+        """
 
 
 class SearchVariantsResponse(SearchResponse):
     """
-This is the response from `POST /variants/search` expressed as JSON.
+    This is the response from POST /variants/search expressed as JSON.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.methods", "type": "record", "name":
@@ -2879,16 +2745,16 @@ This is the response from `POST /variants/search` expressed as JSON.
 "alternateBases"}, {"default": {}, "doc": "", "type": {"values":
 {"items": "string", "type": "array"}, "type": "map"}, "name": "info"},
 {"default": [], "doc": "", "type": {"items": {"doc": "", "type":
-"record", "name": "Call", "fields": [{"doc": "", "type": ["null",
-"string"], "name": "callSetId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "callSetName"}, {"default": [], "doc": "",
-"type": {"items": "int", "type": "array"}, "name": "genotype"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"phaseset"}, {"default": [], "doc": "", "type": {"items": "double",
-"type": "array"}, "name": "genotypeLikelihood"}, {"default": {},
-"doc": "", "type": {"values": {"items": "string", "type": "array"},
-"type": "map"}, "name": "info"}]}, "type": "array"}, "name":
-"calls"}], "doc": ""}, "type": "array"}, "name": "variants"},
+"record", "name": "Call", "fields": [{"default": null, "doc": "",
+"type": ["null", "string"], "name": "callSetName"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "callSetId"},
+{"default": [], "doc": "", "type": {"items": "int", "type": "array"},
+"name": "genotype"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "phaseset"}, {"default": [], "doc": "", "type":
+{"items": "double", "type": "array"}, "name": "genotypeLikelihood"},
+{"default": {}, "doc": "", "type": {"values": {"items": "string",
+"type": "array"}, "type": "map"}, "name": "info"}]}, "type": "array"},
+"name": "calls"}], "doc": ""}, "type": "array"}, "name": "variants"},
 {"default": null, "doc": "", "type": ["null", "string"], "name":
 "nextPageToken"}], "doc": ""}
 """
@@ -2908,34 +2774,49 @@ This is the response from `POST /variants/search` expressed as JSON.
         embeddedTypes = {
             'variants': Variant,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['nextPageToken', 'variants']
+    __slots__ = [
+        'nextPageToken', 'variants'
+    ]
 
-    def __init__(self):
-        self.nextPageToken = None
-        self.variants = []
+    def __init__(self, **kwargs):
+        self.nextPageToken = kwargs.get(
+            'nextPageToken', None)
+        """
+        The continuation token, which is used to page through large
+        result sets.   Provide this value in a subsequent request to
+        return the next page of   results. This field will be empty if
+        there aren't any additional results.
+        """
+        self.variants = kwargs.get(
+            'variants', [])
+        """
+        The list of matching variants.   If the callSetId field on the
+        returned calls is not present,   the ordering of the call sets
+        from a SearchCallSetsRequest   over the parent VariantSet is
+        guaranteed to match the ordering   of the calls on each
+        Variant. The number of results will also be   the same.
+        """
 
 
 class Strand(object):
     """
-Indicates the DNA strand associate for some data item.
-* `POS_STRAND`:  The postive (+) strand.
-* `NEG_STRAND`: The negative (-) strand.
-* `NO_STRAND`: Strand-independent data or data where the strand can not
-be determined.
+    Indicates the DNA strand associate for some data item. *
+    NEG_STRAND: The negative (-) strand. * POS_STRAND:  The postive
+    (+) strand.
     """
-    POS_STRAND = "POS_STRAND"
     NEG_STRAND = "NEG_STRAND"
-    NO_STRAND = "NO_STRAND"
+    POS_STRAND = "POS_STRAND"
 
 
 class Variant(ProtocolElement):
     """
-A `Variant` represents a change in DNA sequence relative to some reference.
-For example, a variant could represent a SNP or an insertion.
-Variants belong to a `VariantSet`.
-This is equivalent to a row in VCF.
+    A Variant represents a change in DNA sequence relative to some
+    reference. For example, a variant could represent a SNP or an
+    insertion. Variants belong to a VariantSet. This is equivalent to
+    a row in VCF.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name": "Variant",
@@ -2952,16 +2833,16 @@ This is equivalent to a row in VCF.
 "alternateBases"}, {"default": {}, "doc": "", "type": {"values":
 {"items": "string", "type": "array"}, "type": "map"}, "name": "info"},
 {"default": [], "doc": "", "type": {"items": {"doc": "", "type":
-"record", "name": "Call", "fields": [{"doc": "", "type": ["null",
-"string"], "name": "callSetId"}, {"default": null, "doc": "", "type":
-["null", "string"], "name": "callSetName"}, {"default": [], "doc": "",
-"type": {"items": "int", "type": "array"}, "name": "genotype"},
-{"default": null, "doc": "", "type": ["null", "string"], "name":
-"phaseset"}, {"default": [], "doc": "", "type": {"items": "double",
-"type": "array"}, "name": "genotypeLikelihood"}, {"default": {},
-"doc": "", "type": {"values": {"items": "string", "type": "array"},
-"type": "map"}, "name": "info"}]}, "type": "array"}, "name":
-"calls"}], "doc": ""}
+"record", "name": "Call", "fields": [{"default": null, "doc": "",
+"type": ["null", "string"], "name": "callSetName"}, {"default": null,
+"doc": "", "type": ["null", "string"], "name": "callSetId"},
+{"default": [], "doc": "", "type": {"items": "int", "type": "array"},
+"name": "genotype"}, {"default": null, "doc": "", "type": ["null",
+"string"], "name": "phaseset"}, {"default": [], "doc": "", "type":
+{"items": "double", "type": "array"}, "name": "genotypeLikelihood"},
+{"default": {}, "doc": "", "type": {"values": {"items": "string",
+"type": "array"}, "type": "map"}, "name": "info"}]}, "type": "array"},
+"name": "calls"}], "doc": ""}
 """
     schema = avro.schema.parse(_schemaSource)
     requiredFields = set([
@@ -2985,39 +2866,107 @@ This is equivalent to a row in VCF.
         embeddedTypes = {
             'calls': Call,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['alternateBases', 'calls', 'created', 'end', 'id', 'info',
-                 'names', 'referenceBases', 'referenceName',
-                 'start', 'updated', 'variantSetId']
+    __slots__ = [
+        'alternateBases', 'calls', 'created', 'end', 'id', 'info',
+        'names', 'referenceBases', 'referenceName', 'start',
+        'updated', 'variantSetId'
+    ]
 
-    def __init__(self):
-        self.alternateBases = []
-        self.calls = []
-        self.created = None
-        self.end = None
-        self.id = None
-        self.info = {}
-        self.names = []
-        self.referenceBases = None
-        self.referenceName = None
-        self.start = None
-        self.updated = None
-        self.variantSetId = None
+    def __init__(self, **kwargs):
+        self.alternateBases = kwargs.get(
+            'alternateBases', [])
+        """
+        The bases that appear instead of the reference bases. Multiple
+        alternate   alleles are possible.
+        """
+        self.calls = kwargs.get(
+            'calls', [])
+        """
+        The variant calls for this particular variant. Each one
+        represents the   determination of genotype with respect to
+        this variant. Calls in this array   are implicitly associated
+        with this Variant.
+        """
+        self.created = kwargs.get(
+            'created', None)
+        """
+        The date this variant was created in milliseconds from the
+        epoch.
+        """
+        self.end = kwargs.get(
+            'end', None)
+        """
+        The end position (exclusive), resulting in [start, end)
+        closed-open interval.   This is typically calculated by start
+        + referenceBases.length.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The variant ID.
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        A map of additional variant information.
+        """
+        self.names = kwargs.get(
+            'names', [])
+        """
+        Names for the variant, for example a RefSNP ID.
+        """
+        self.referenceBases = kwargs.get(
+            'referenceBases', None)
+        """
+        The reference bases for this variant. They start at the given
+        start position.
+        """
+        self.referenceName = kwargs.get(
+            'referenceName', None)
+        """
+        The reference on which this variant occurs.   (e.g. chr20 or
+        X)
+        """
+        self.start = kwargs.get(
+            'start', None)
+        """
+        The start position at which this variant occurs (0-based).
+        This corresponds to the first base of the string of reference
+        bases.   Genomic positions are non-negative integers less than
+        reference length.   Variants spanning the join of circular
+        genomes are represented as   two variants one on each side of
+        the join (position 0).
+        """
+        self.updated = kwargs.get(
+            'updated', None)
+        """
+        The time at which this variant was last updated in
+        milliseconds from the epoch.
+        """
+        self.variantSetId = kwargs.get(
+            'variantSetId', None)
+        """
+        The ID of the VariantSet this variant belongs to. This
+        transitively defines   the ReferenceSet against which the
+        Variant is to be interpreted.
+        """
 
 
 class VariantSet(ProtocolElement):
     """
-`Variant` and `CallSet` both belong to a `VariantSet`.
-`VariantSet` belongs to a `Dataset`.
-The variant set is equivalent to a VCF file.
+    A VariantSet is a collection of variants and variant calls
+    intended to be analyzed together.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
 "VariantSet", "fields": [{"doc": "", "type": "string", "name": "id"},
-{"doc": "", "type": "string", "name": "datasetId"}, {"doc": "",
-"type": "string", "name": "referenceSetId"}, {"default": [], "doc":
-"", "type": {"items": {"doc": "", "type": "record", "name":
+{"default": null, "doc": "", "type": ["null", "string"], "name":
+"name"}, {"doc": "", "type": "string", "name": "datasetId"}, {"doc":
+"", "type": "string", "name": "referenceSetId"}, {"default": [],
+"doc": "", "type": {"items": {"doc": "", "type": "record", "name":
 "VariantSetMetadata", "fields": [{"doc": "", "type": "string", "name":
 "key"}, {"doc": "", "type": "string", "name": "value"}, {"doc": "",
 "type": "string", "name": "id"}, {"doc": "", "type": "string", "name":
@@ -3046,20 +2995,48 @@ The variant set is equivalent to a VCF file.
         embeddedTypes = {
             'metadata': VariantSetMetadata,
         }
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['datasetId', 'id', 'metadata', 'referenceSetId']
+    __slots__ = [
+        'datasetId', 'id', 'metadata', 'name', 'referenceSetId'
+    ]
 
-    def __init__(self):
-        self.datasetId = None
-        self.id = None
-        self.metadata = []
-        self.referenceSetId = None
+    def __init__(self, **kwargs):
+        self.datasetId = kwargs.get(
+            'datasetId', None)
+        """
+        The ID of the dataset this variant set belongs to.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        The variant set ID.
+        """
+        self.metadata = kwargs.get(
+            'metadata', [])
+        """
+        Optional metadata associated with this variant set.   This
+        array can be used to store information about the variant set,
+        such as information found   in VCF header fields, that isn't
+        already available in first class fields such as "name".
+        """
+        self.name = kwargs.get(
+            'name', None)
+        """
+        The variant set name.
+        """
+        self.referenceSetId = kwargs.get(
+            'referenceSetId', None)
+        """
+        The ID of the reference set that describes the sequences used
+        by the variants in this set.
+        """
 
 
 class VariantSetMetadata(ProtocolElement):
     """
-This metadata represents VCF header information.
+    Optional metadata associated with a variant set.
     """
     _schemaSource = """
 {"namespace": "org.ga4gh.models", "type": "record", "name":
@@ -3089,18 +3066,53 @@ This metadata represents VCF header information.
     @classmethod
     def getEmbeddedType(cls, fieldName):
         embeddedTypes = {}
+
         return embeddedTypes[fieldName]
 
-    __slots__ = ['description', 'id', 'info', 'key', 'number', 'type', 'value']
+    __slots__ = [
+        'description', 'id', 'info', 'key', 'number', 'type', 'value'
+    ]
 
-    def __init__(self):
-        self.description = None
-        self.id = None
-        self.info = {}
-        self.key = None
-        self.number = None
-        self.type = None
-        self.value = None
+    def __init__(self, **kwargs):
+        self.description = kwargs.get(
+            'description', None)
+        """
+        A textual description of this metadata.
+        """
+        self.id = kwargs.get(
+            'id', None)
+        """
+        User-provided ID field, not enforced by this API.   Two or
+        more pieces of structured metadata with identical   id and key
+        fields are considered equivalent.   FIXME: If it's not
+        enforced, then why can't it be null?
+        """
+        self.info = kwargs.get(
+            'info', {})
+        """
+        Remaining structured metadata key-value pairs.
+        """
+        self.key = kwargs.get(
+            'key', None)
+        """
+        The top-level key.
+        """
+        self.number = kwargs.get(
+            'number', None)
+        """
+        The number of values that can be included in a field described
+        by this   metadata.
+        """
+        self.type = kwargs.get(
+            'type', None)
+        """
+        The type of data.
+        """
+        self.value = kwargs.get(
+            'value', None)
+        """
+        The value field for simple metadata.
+        """
 
 
 class ReadCounts(ProtocolElement):
@@ -3393,24 +3405,12 @@ This is the response from 'POST /featuregroup/search' expressed as JSON.
 
 
 postMethods = \
-    [('/analyses/search',
-      SearchAnalysesRequest,
-      SearchAnalysesResponse),
-     ('/callsets/search',
+    [('/callsets/search',
       SearchCallSetsRequest,
       SearchCallSetsResponse),
-     ('/experiments/search',
-      SearchExperimentsRequest,
-      SearchExperimentsResponse),
-     ('/featuregroup/search',
-      SearchFeatureGroupRequest,
-      SearchFeatureGroupResponse),
-     ('/individualgroups/search',
-      SearchIndividualGroupsRequest,
-      SearchIndividualGroupsResponse),
-     ('/individuals/search',
-      SearchIndividualsRequest,
-      SearchIndividualsResponse),
+     ('/datasets/search',
+      SearchDatasetsRequest,
+      SearchDatasetsResponse),
      ('/readgroupsets/search',
       SearchReadGroupSetsRequest,
       SearchReadGroupSetsResponse),
@@ -3423,9 +3423,6 @@ postMethods = \
      ('/referencesets/search',
       SearchReferenceSetsRequest,
       SearchReferenceSetsResponse),
-     ('/samples/search',
-      SearchSamplesRequest,
-      SearchSamplesResponse),
      ('/variants/search',
       SearchVariantsRequest,
       SearchVariantsResponse),

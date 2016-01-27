@@ -12,8 +12,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import server_test as server_test
-import client as client
+import server_test
+import client
 
 
 class TestGestalt(server_test.ServerTest):
@@ -21,11 +21,17 @@ class TestGestalt(server_test.ServerTest):
     An end-to-end test of the client and server
     """
     def testEndToEnd(self):
+        self.simulatedDatasetId = "c2ltdWxhdGVkRGF0YXNldDA="
+        self.simulatedVariantSetId = "c2ltdWxhdGVkRGF0YXNldDA6c2ltVnMw"
+        self.simulatedReadGroupId = "c2ltdWxhdGVkRGF0YXNldDA6c2ltUmdzMDpyZzA="
+        self.simulatedReferenceSetId = "cmVmZXJlbmNlU2V0MA=="
+        self.simulatedReferenceId = "cmVmZXJlbmNlU2V0MDpzcnMw"
         self.client = client.ClientForTesting(self.server.getUrl())
-        self.runVariantSetRequest()
+        self.runVariantsRequest()
         self.assertLogsWritten()
         self.runReadsRequest()
         self.runReferencesRequest()
+        self.runVariantSetsRequestDatasetTwo()
         self.client.cleanup()
 
     def assertLogsWritten(self):
@@ -54,9 +60,8 @@ class TestGestalt(server_test.ServerTest):
             [], clientOutLines,
             "Client stdout log is empty")
 
-        # num of client stdout should be twice the value of
-        # SIMULATED_BACKEND_NUM_VARIANT_SETS
-        expectedNumClientOutLines = 20
+        # number of variants to expect
+        expectedNumClientOutLines = 2
         self.assertEqual(len(clientOutLines), expectedNumClientOutLines)
 
         # client stderr should log at least one post
@@ -69,23 +74,36 @@ class TestGestalt(server_test.ServerTest):
             requestFound,
             "No request logged from the client to stderr")
 
-    def runVariantSetRequest(self):
-        self.runClientCmd(self.client, "variants-search -s0 -e2")
+    def runVariantsRequest(self):
+        self.runClientCmd(
+            self.client,
+            "variants-search",
+            "-s 0 -e 2 -V {}".format(self.simulatedVariantSetId))
 
     def runReadsRequest(self):
-        cmd = "reads-search --readGroupIds 'aReadGroupSet:one'"
-        self.runClientCmd(self.client, cmd)
+        args = "--readGroupIds {} --referenceId {}".format(
+            self.simulatedReadGroupId, self.simulatedReferenceId)
+        self.runClientCmd(self.client, "reads-search", args)
 
     def runReferencesRequest(self):
-        referenceSetId = 'aReferenceSet'
-        referenceId = 'aReferenceSet:srsone'
+        referenceSetId = self.simulatedReferenceSetId
+        referenceId = self.simulatedReferenceId
         cmd = "referencesets-search"
         self.runClientCmd(self.client, cmd)
         cmd = "references-search"
-        self.runClientCmd(self.client, cmd)
-        cmd = "referencesets-get {}".format(referenceSetId)
-        self.runClientCmd(self.client, cmd)
-        cmd = "references-get {}".format(referenceId)
-        self.runClientCmd(self.client, cmd)
-        cmd = "references-list-bases {}".format(referenceId)
-        self.runClientCmd(self.client, cmd)
+        args = "--referenceSetId={}".format(referenceSetId)
+        self.runClientCmd(self.client, cmd, args)
+        cmd = "referencesets-get"
+        args = "{}".format(referenceSetId)
+        self.runClientCmd(self.client, cmd, args)
+        cmd = "references-get"
+        args = "{}".format(referenceId)
+        self.runClientCmd(self.client, cmd, args)
+        cmd = "references-list-bases"
+        args = "{}".format(referenceId)
+        self.runClientCmd(self.client, cmd, args)
+
+    def runVariantSetsRequestDatasetTwo(self):
+        cmd = "variantsets-search"
+        args = "--datasetId {}".format(self.simulatedDatasetId)
+        self.runClientCmd(self.client, cmd, args)

@@ -147,24 +147,24 @@ class ImportGraphLayerChecker(object):
     but as it stands the time for these tests is dominated by file
     operations and and parsing the ASTs
     """
-    excludedPythonFilenames = set([
-        '__init__.py',
-    ])
+    excludedPythonFilenames = set(['__init__.py', '_version.py'])
 
     # each file/module is in one and only one moduleGroup
     moduleGroupNames = {
         'cli': ['ga4gh/cli.py'],
         'client': ['ga4gh/client.py'],
         'frontend': ['ga4gh/frontend.py'],
-        'backend': ['ga4gh/backend.py'],
+        'backend': ['ga4gh/backend.py', 'ga4gh/datarepo.py'],
         'exceptions': ['ga4gh/exceptions.py'],
         'datamodel': ['ga4gh/datamodel/reads.py',
                       'ga4gh/datamodel/references.py',
                       'ga4gh/datamodel/rna_quantification.py',
                       'ga4gh/datamodel/variants.py',
                       'ga4gh/datamodel/datasets.py'],
-        'libraries': ['ga4gh/converters.py'],
-        'protocol': ['ga4gh/protocol.py', 'ga4gh/_protocol_definitions.py'],
+        'libraries': ['ga4gh/converters.py',
+                      'ga4gh/configtest.py'],
+        'protocol': ['ga4gh/protocol.py',
+                     'ga4gh/_protocol_definitions.py'],
         'config': ['ga4gh/serverconfig.py'],
         'avrotools': ['ga4gh/avrotools.py'],
     }
