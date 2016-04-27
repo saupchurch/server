@@ -17,7 +17,7 @@ class BaseConfig(object):
     """
     MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2MB
     MAX_RESPONSE_LENGTH = 1024 * 1024  # 1MB
-    REQUEST_VALIDATION = False
+    REQUEST_VALIDATION = True
     RESPONSE_VALIDATION = False
     DEFAULT_PAGE_SIZE = 100
     DATA_SOURCE = "empty://"
@@ -30,8 +30,11 @@ class BaseConfig(object):
     SIMULATED_BACKEND_NUM_REFERENCE_SETS = 1
     SIMULATED_BACKEND_NUM_REFERENCES_PER_REFERENCE_SET = 1
     SIMULATED_BACKEND_NUM_ALIGNMENTS_PER_READ_GROUP = 2
+    SIMULATED_BACKEND_NUM_READ_GROUPS_PER_READ_GROUP_SET = 2
 
     FILE_HANDLE_CACHE_MAX_SIZE = 50
+
+    LANDING_MESSAGE_HTML = "landing_message.html"
 
 
 class DevelopmentConfig(BaseConfig):
@@ -47,6 +50,16 @@ class LocalOidConfig(DevelopmentConfig):
     Configuration used for developing against a local OIDC server
     """
     OIDC_PROVIDER = "https://localhost:8443"
+
+
+class SimulatedConfig(BaseConfig):
+    """
+    A configuration that uses simulated backing for testing.
+    """
+    DATA_SOURCE = "simulated://"
+    DEBUG = True
+    REQUEST_VALIDATION = True
+    RESPONSE_VALIDATION = True
 
 
 class ProductionConfig(BaseConfig):

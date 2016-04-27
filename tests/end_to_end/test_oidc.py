@@ -16,6 +16,9 @@ import client
 import server
 import server_test
 
+import ga4gh.datamodel as datamodel
+import tests.paths as paths
+
 
 def getClientKey(server_url, username, password):
     """
@@ -41,10 +44,12 @@ def getClientKey(server_url, username, password):
     keyPage = session.post(nextUrl, data, verify=False)
     # Extract the key from the page
     keyTree = html.fromstring(keyPage.text)
-    tokenMarker = 'Session Token '  # the token always appears after this text
-    tokenTag = (tag for tag in keyTree.iterdescendants()
-                if tag.text_content().startswith(tokenMarker)).next()
-    return tokenTag.text_content()[len(tokenMarker):]
+    sessionTokenTags = keyTree.find_class("session-token")
+    if len(sessionTokenTags) > 0:
+        sessionKey = keyTree.find_class("session-token")[0].text_content()
+    else:
+        raise StopIteration
+    return sessionKey
 
 
 class TestOidc(server_test.ServerTestClass):
@@ -53,7 +58,9 @@ class TestOidc(server_test.ServerTestClass):
     """
     @classmethod
     def otherSetup(cls):
-        cls.simulatedVariantSetId = "c2ltdWxhdGVkRGF0YXNldDA6c2ltVnMw"
+        cls.simulatedVariantSetId = \
+            datamodel.VariantSetCompoundId.obfuscate(
+                paths.simulatedVariantSetId)
         requests.packages.urllib3.disable_warnings()
         cls.opServer = server.OidcOpServerForTesting()
         cls.opServer.start()

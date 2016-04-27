@@ -160,7 +160,7 @@ class TestFrontend(unittest.TestCase):
         response = self.sendGetRequest(path)
         return response
 
-    def sendGetCallset(self, id_=None):
+    def sendGetCallSet(self, id_=None):
         if id_ is None:
             id_ = self.callSetId
         path = "/callsets/{}".format(id_)
@@ -261,7 +261,7 @@ class TestFrontend(unittest.TestCase):
         self.verifySearchRouting('/referencesets/search', True)
         self.verifySearchRouting('/references/search', True)
 
-    def testRouteCallsets(self):
+    def testRouteCallSets(self):
         path = '/callsets/search'
         self.assertEqual(415, self.app.post(path).status_code)
         self.assertEqual(200, self.app.options(path).status_code)
@@ -307,7 +307,8 @@ class TestFrontend(unittest.TestCase):
         self.assertEqual(200, response.status_code)
 
         # Test Error: 404, ID not found
-        obfuscated = datamodel.CompoundId.obfuscate("notValid")
+        invalidId = datamodel.DatasetCompoundId.getInvalidIdString()
+        obfuscated = datamodel.CompoundId.obfuscate(invalidId)
         compoundId = datamodel.DatasetCompoundId.parse(obfuscated)
         response = self.sendGetDataset(str(compoundId))
         self.assertEqual(404, response.status_code)
@@ -319,7 +320,8 @@ class TestFrontend(unittest.TestCase):
         variantSetId = responseData.variantSets[0].id
         response = self.sendGetVariantSet(variantSetId)
         self.assertEqual(200, response.status_code)
-        obfuscated = datamodel.CompoundId.obfuscate("notValid:notValid")
+        invalidId = datamodel.VariantSetCompoundId.getInvalidIdString()
+        obfuscated = datamodel.CompoundId.obfuscate(invalidId)
         compoundId = datamodel.VariantSetCompoundId.parse(obfuscated)
         response = self.sendGetVariantSet(str(compoundId))
         self.assertEqual(404, response.status_code)
@@ -340,8 +342,8 @@ class TestFrontend(unittest.TestCase):
         self.assertEqual(
             responseData.id, self.readGroupId)
 
-    def testGetCallset(self):
-        response = self.sendGetCallset()
+    def testGetCallSet(self):
+        response = self.sendGetCallSet()
         self.assertEqual(200, response.status_code)
         responseData = protocol.CallSet.fromJsonString(
             response.data)
@@ -386,7 +388,8 @@ class TestFrontend(unittest.TestCase):
                                         referenceId=None)
         self.assertEqual(501, response.status_code)
 
-    def testSearchReadsMultipleReadGroupSets(self):
-        response = self.sendReadsSearch(readGroupIds=[self.readGroupId, "42"],
-                                        referenceId=self.referenceId)
-        self.assertEqual(501, response.status_code)
+    def testSearchReadsMultipleReadGroupSetsSetMismatch(self):
+        response = self.sendReadsSearch(
+            readGroupIds=[self.readGroupId, "42"],
+            referenceId=self.referenceId)
+        self.assertEqual(400, response.status_code)

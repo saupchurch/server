@@ -166,7 +166,7 @@ class SamLine(object):
         if read.numberReads == 2:
             flag = reads.SamFlags.setFlag(
                 flag, reads.SamFlags.READ_PAIRED)
-        if read.properPlacement:
+        if not read.improperPlacement:
             flag = reads.SamFlags.setFlag(
                 flag, reads.SamFlags.READ_PROPER_PAIR)
         if read.alignment is None:
@@ -241,8 +241,7 @@ class SamLine(object):
         tags = []
         for tag, value in read.info.items():
             val = cls._parseTagValue(tag, value)
-            tagTuple = (tag, val)
-            tags.append(tagTuple)
+            tags.append((tag.encode(cls._encoding), val))
         retval = tuple(tags)
         return retval
 

@@ -10,6 +10,7 @@ import os
 import ga4gh.exceptions as exceptions
 import ga4gh.datamodel.datasets as datasets
 import ga4gh.datamodel.references as references
+import ga4gh.datamodel.ontologies as ontologies
 
 
 class AbstractDataRepository(object):
@@ -23,6 +24,8 @@ class AbstractDataRepository(object):
         self._referenceSetIdMap = {}
         self._referenceSetNameMap = {}
         self._referenceSetIds = []
+        self._ontologyNameMap = {}
+        self._ontologyNames = []
 
     def addDataset(self, dataset):
         """
@@ -41,6 +44,14 @@ class AbstractDataRepository(object):
         self._referenceSetIdMap[id_] = referenceSet
         self._referenceSetNameMap[referenceSet.getLocalId()] = referenceSet
         self._referenceSetIds.append(id_)
+
+    def addOntologyMap(self, ontologyMap):
+        """
+        Add an ontology map to this data repository.
+        """
+        for name in ontologyMap.keys():
+            self._ontologyNameMap[name] = ontologyMap.get(name)
+            self._ontologyNames.append(name)
 
     def getDatasets(self):
         """
@@ -88,6 +99,18 @@ class AbstractDataRepository(object):
         Returns the number of reference sets in this data repository.
         """
         return len(self._referenceSetIds)
+
+    def getOntologyMap(self, name):
+        """
+        Returns an ontology map by name
+        """
+        return self._ontologyNameMap.get(name, None)
+
+    def getOntologyMaps(self):
+        """
+        Returns all ontology maps in the repo
+        """
+        return [self._ontologyNameMap[name] for name in self._ontologyNames]
 
     def getReferenceSet(self, id_):
         """
@@ -160,13 +183,21 @@ class FileSystemDataRepository(AbstractDataRepository):
     """
     A data repository based on the file system
     """
+    referenceSetsDirName = "referenceSets"
+    datasetsDirName = "datasets"
+    ontologiesDirName = "ontologymaps"
+
     def __init__(self, dataDir):
         super(FileSystemDataRepository, self).__init__()
         self._dataDir = dataDir
-        sourceDirNames = ["referenceSets", "datasets"]
+        sourceDirNames = [self.referenceSetsDirName,
+                          self.ontologiesDirName,
+                          self.datasetsDirName]
         constructors = [
-            references.HtslibReferenceSet, datasets.FileSystemDataset]
-        objectAdders = [self.addReferenceSet, self.addDataset]
+            references.HtslibReferenceSet, ontologies.FileSystemOntologies,
+            datasets.FileSystemDataset]
+        objectAdders = [self.addReferenceSet, self.addOntologyMap,
+                        self.addDataset]
         for sourceDirName, constructor, objectAdder in zip(
                 sourceDirNames, constructors, objectAdders):
             sourceDir = os.path.join(self._dataDir, sourceDirName)
@@ -174,3 +205,16 @@ class FileSystemDataRepository(AbstractDataRepository):
                 relativePath = os.path.join(sourceDir, setName)
                 if os.path.isdir(relativePath):
                     objectAdder(constructor(setName, relativePath, self))
+
+    def checkConsistency(self):
+        """
+        Perform checks that ensure the consistency of the data.
+        Factored into a separate method from server init since the
+        data repo object can be created on a partially-complete
+        data set.
+        """
+        for dataset in self.getDatasets():
+            for readGroupSet in dataset.getReadGroupSets():
+                readGroupSet.checkConsistency(self)
+            for variantSet in dataset.getVariantSets():
+                variantSet.checkConsistency()
