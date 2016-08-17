@@ -5,49 +5,118 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import fnmatch
-import os
+import collections
+import os.path
+
 import ga4gh.protocol as protocol
+import ga4gh.exceptions as exceptions
+
+import ga4gh.datamodel.obo_parser as obo_parser
+from ga4gh import pb
+
+SEQUENCE_ONTOLOGY_PREFIX = "SO"
 
 
-class FileSystemOntology(object):
+class OboReader(obo_parser.OBOReader):
     """
-    The base class of storing an ontology
-    At this moment an "Ontology" is just a map between names and IDs (e.g.
-    in Sequence Ontology we would have "SO:0001583 <-> missense_variant")
-    This is a tempotrary solution and must be replaced by more comprehensive
-    ontology object.
+    We extend the OBOReader class to allow us throw a custom exception
+    so that it will be handled correctly. The default implementation
+    throws an Exception instance on error, which cannot be caught
+    without masking pretty much any kind of error.
     """
+    def _die(self, message, line):
+        raise exceptions.OntologyFileFormatException(
+            self.obo_file, "Error at line {}: {}".format(line, message))
 
-    def __init__(self, dataDir):
-        self._localId = os.path.basename(dataDir)
-        self._nameIdMap = dict()
-        self._idNameMap = dict()
 
-    def add(self, id_, name):
+class Ontology(object):
+    """
+    A bidectional map between ontology names and IDs (e.g. in Sequence
+    Ontology we would have "SO:0001583 <-> missense_variant") derived
+    from an OBO file.
+    """
+    def __init__(self, name):
+        self._id = None
+        self._name = name
+        self._sourceName = name
+        self._sourceVersion = None
+        self._ontologyPrefix = None
+        self._dataUrl = None
+        # There can be duplicate names, so we need to store a list of IDs.
+        self._nameIdMap = collections.defaultdict(list)
+
+    def _readFile(self):
+        if not os.path.exists(self._dataUrl):
+            raise exceptions.FileOpenFailedException(self._dataUrl)
+        reader = OboReader(obo_file=self._dataUrl)
+        ids = set()
+        for record in reader:
+            if record.id in ids:
+                raise exceptions.OntologyFileFormatException(
+                    self._dataUrl, "Duplicate ID {}".format(record.id))
+            ids.add(record.id)
+            self._nameIdMap[record.name].append(record.id)
+        self._sourceVersion = reader.format_version
+        if len(ids) == 0:
+            raise exceptions.OntologyFileFormatException(
+                self._dataUrl, "No valid records found.")
+        # To get prefix, pull out an ID and parse it.
+        self._ontologyPrefix = record.id.split(":")[0]
+        self._sourceVersion = reader.data_version
+
+    def populateFromFile(self, dataUrl):
         """
-        Adds an ontology term (id, name pair)
-
-        :param id_: ontology term ID (ex "SO:0000704")
-        :param name: corresponding ontology term name (ex "gene")
+        Populates this ontology map from the specified dataUrl.
+        This reads the ontology term name and ID pairs from the
+        specified file.
         """
-        self._nameIdMap[id_] = name
-        self._idNameMap[name] = id_
+        self._dataUrl = dataUrl
+        self._readFile()
 
-    def getLocalId(self):
-        return self._localId
+    def populateFromRow(self, row):
+        """
+        Populates this Ontology using values in the specified DB row.
+        """
+        self._id = row[b'id']
+        self._dataUrl = row[b'dataUrl']
+        self._readFile()
+        # TODO sanity check the stored values against what we have just read.
 
-    def getId(self, name, default=""):
-        return self._idNameMap.get(name, default)
+    def getId(self):
+        """
+        Returns the ID of this Ontology. This is an internal
+        identifier.
+        """
+        return self._id
 
-    def hasId(self, id_):
-        return id_ in self._nameIdMap
+    def getOntologyPrefix(self):
+        """
+        Returns the ontology prefix string, i.e. "SO" for a sequence
+        ontology and "GO" for gene a ontology.
+        """
+        return self._ontologyPrefix
 
-    def hasName(self, name):
-        return name in self._idNameIdMap
+    def getSourceVersion(self):
+        """
+        The version of the ontology derived from the OBO file.
+        """
+        return self._sourceVersion
 
-    def getName(self, id_, default=""):
-        return self._nameIdMap.get(id_, default)
+    def getDataUrl(self):
+        return self._dataUrl
+
+    def getName(self):
+        """
+        Returns the name of this ontology.
+        """
+        return self._name
+
+    def getTermIds(self, termName):
+        """
+        Returns the list of ontology IDs scorresponding to the specified term
+        name. If the term name is not found, return the empty list.
+        """
+        return self._nameIdMap[termName]
 
     def getGaTermByName(self, name):
         """
@@ -56,79 +125,18 @@ class FileSystemOntology(object):
         :param name: name of the ontology term, ex. "gene".
         :return: GA4GH OntologyTerm object.
         """
+        # TODO what is the correct value when we have no mapping??
+        termIds = self.getTermIds(name)
+        if len(termIds) == 0:
+            termId = ""
+            # TODO add logging for missed term translation.
+        else:
+            # TODO what is the correct behaviour here when we have multiple
+            # IDs matching a given name?
+            termId = termIds[0]
         term = protocol.OntologyTerm()
         term.term = name
-        term.id = self.getId(name)
-        # TODO set source name smarter
-        term.sourceName = self._sourceName
-        # TODO how do we get the right version?
-        term.sourceVersion = None
+        term.id = termId
+        term.source_name = self._sourceName
+        term.source_version = pb.string(self._sourceVersion)
         return term
-
-    def getGaTermById(self, id_):
-        """
-        Returns a GA4GH OntologyTerm object by its ontology ID.
-
-        :param name: name of the ontology term, ex. "SO:0000704"
-            is the ID for "gene" in the Sequence ontology.
-        :return: GA4GH OntologyTerm object.
-        """
-        term = protocol.OntologyTerm()
-        term.term = self.getName(id_)
-        term.id = id_
-        term.sourceName = self._sourceName
-        # TODO how do we get the right version?
-        term.sourceVersion = None
-        return term
-
-    def readOntology(self, filename):
-        """
-        Extracts ontology maps (ID's to names and vice versa)
-        from a file.
-
-        :param filename: the name of the file with ID, name pairs.
-        """
-        self._sourceName = filename
-        with open(filename) as f:
-            for line in f:
-                # File format: id \t name
-                fields = line.rstrip().split("\t")
-                self.add(fields[0], fields[1])
-
-
-class FileSystemOntologies(object):
-    """
-    An ontology read from the file system.
-    This implementation uses a tab separated TXT file: "id\tname"
-    """
-
-    def __init__(self, localId, dataDir, backend):
-        self._ontologyNameMap = dict()
-        self._localId = localId
-        self.readOntologies(dataDir)
-
-    def getLocalId(self):
-        return self._localId
-
-    def add(self, ontologyName, ontology):
-        self._ontologyNameMap[ontologyName] = ontology
-
-    def get(self, ontologyName):
-        return self._ontologyNameMap[ontologyName]
-
-    def keys(self):
-        return self._ontologyNameMap.keys()
-
-    def len(self):
-        return len(self._ontologyNameMap)
-
-    def readOntologies(self, dataDir):
-        self._dataDir = dataDir
-        # Find TXT files
-        for filename in os.listdir(dataDir):
-            if fnmatch.fnmatch(filename, '*.txt'):
-                ontologyName, _ = os.path.splitext(filename)
-                path = os.path.join(dataDir, filename)
-                ontology = FileSystemOntology(dataDir)
-                ontology.readOntology(path)
-                self.add(ontologyName, ontology)

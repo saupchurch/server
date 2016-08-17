@@ -13,8 +13,8 @@ library are defined by the
 
 .. warning:: This client API should be considered early alpha quality,
           and may change in arbitrary ways. In particular, the current
-          camelCase convention for identifiers may change to snake_case
-          in future.
+          camelCase convention for identifiers is scheduled to change
+          in the near future.
 
 .. todo:: A full description of this API and links to a tutorial on how
        to use it, as well as a quickstart showing the basic usage.
@@ -23,68 +23,7 @@ library are defined by the
 Types
 -----
 
-.. todo:: A short overview of the types and links to the high-level
-        docs.
-
-++++++++++
-References
-++++++++++
-
-.. autoclass:: ga4gh.protocol.ReferenceSet
-    :members:
-
-.. autoclass:: ga4gh.protocol.Reference
-    :members:
-
-
-++++++++
-Datasets
-++++++++
-
-.. autoclass:: ga4gh.protocol.Dataset
-    :members:
-
-++++++++
-Variants
-++++++++
-
-.. autoclass:: ga4gh.protocol.VariantSet
-    :members:
-
-.. autoclass:: ga4gh.protocol.CallSet
-    :members:
-
-.. autoclass:: ga4gh.protocol.Variant
-    :members:
-
-++++++++++++++++++++++++
-Variant Annotation
-++++++++++++++++++++++++
-
-.. autoclass:: ga4gh.protocol.VariantAnnotationSet
-    :members:
-
-.. autoclass:: ga4gh.protocol.VariantAnnotation
-    :members:
-
-.. autoclass:: ga4gh.protocol.TranscriptEffect
-    :members:
-
-+++++
-Reads
-+++++
-
-.. autoclass:: ga4gh.protocol.ReadGroupSet
-    :members:
-
-.. autoclass:: ga4gh.protocol.ReadGroup
-    :members:
-
-.. autoclass:: ga4gh.protocol.ReadAlignment
-    :members:
-
-.. autoclass:: ga4gh.protocol.Position
-    :members:
+.. todo:: Add links to the upstream documentation for the GA4GH types.
 
 ----------
 Client API
@@ -93,10 +32,11 @@ Client API
 .. todo:: Add overview documentation for the client API.
 
 .. autoclass:: ga4gh.client.HttpClient
-    :members: getReferenceSet, getReference,
-        getDataset, getVariantSet, getVariant,
-        getReadGroupSet, getReadGroup,
-        searchDatasets, searchReferenceSets, searchReferences,
-        searchVariantSets, searchVariants, searchReadGroupSets,
-        searchReads
+    :members: get_reference_set, get_reference,
+        get_dataset, get_variant_set, get_variant,
+        get_read_group_set, get_read_group,
+        get_bio_sample, get_individual,
+        search_datasets, search_reference_sets, search_references,
+        search_variant_sets, search_variants, search_read_group_sets,
+        search_reads, search_bio_samples, search_individuals
 

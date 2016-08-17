@@ -22,6 +22,37 @@ import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 
 
+def getPathOfExecutable(executable):
+    """
+    Returns the full path of the executable, or None if the executable
+    can not be found.
+    """
+    exe_paths = os.environ['PATH'].split(':')
+    for exe_path in exe_paths:
+        exe_file = os.path.join(exe_path, executable)
+        if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
+            return exe_file
+    return None
+
+
+def requireExecutables(executables):
+    """
+    Check that all of the given executables are on the path.
+    If at least one of them is not, exit the script and inform
+    the user of the missing requirement(s).
+    """
+    missingExecutables = []
+    for executable in executables:
+        if getPathOfExecutable(executable) is None:
+            missingExecutables.append(executable)
+    if len(missingExecutables) > 0:
+        log("In order to run this script, the following "
+            "executables need to be on the path:")
+        for missingExecutable in missingExecutables:
+            print(missingExecutable)
+        exit(1)
+
+
 def ga4ghImportGlue():
     """
     Call this method before importing a ga4gh module in the scripts dir.
@@ -148,11 +179,18 @@ def runCommandSplits(splits, silent=False):
     """
     Run a shell command given the command's parsed command line
     """
-    if silent:
-        with open(os.devnull, 'w') as devnull:
-            subprocess.check_call(splits, stdout=devnull, stderr=devnull)
-    else:
-        subprocess.check_call(splits)
+    try:
+        if silent:
+            with open(os.devnull, 'w') as devnull:
+                subprocess.check_call(splits, stdout=devnull, stderr=devnull)
+        else:
+            subprocess.check_call(splits)
+    except OSError, e:
+        if e.errno == 2:  # cmd not found
+            raise Exception(
+                "Can't find command while trying to run {}".format(splits))
+        else:
+            raise
 
 
 def runCommand(command, silent=False):

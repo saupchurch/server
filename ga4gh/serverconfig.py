@@ -31,6 +31,8 @@ class BaseConfig(object):
     SIMULATED_BACKEND_NUM_REFERENCES_PER_REFERENCE_SET = 1
     SIMULATED_BACKEND_NUM_ALIGNMENTS_PER_READ_GROUP = 2
     SIMULATED_BACKEND_NUM_READ_GROUPS_PER_READ_GROUP_SET = 2
+    SIMULATED_BACKEND_NUM_RNA_QUANTIFICATION_SETS = 2
+    SIMULATED_BACKEND_NUM_EXPRESSION_LEVELS_PER_RNA_QUANT_SET = 2
 
     FILE_HANDLE_CACHE_MAX_SIZE = 50
 
@@ -41,7 +43,7 @@ class DevelopmentConfig(BaseConfig):
     """
     Configuration used for development.
     """
-    DATA_SOURCE = "ga4gh-example-data"
+    DATA_SOURCE = "ga4gh-example-data/repo.db"
     DEBUG = True
 
 

@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import mock
 import unittest
 import inspect
 
@@ -21,17 +22,19 @@ class TestExceptionHandler(unittest.TestCase):
     def setUpClass(cls):
         frontend.reset()
         frontend.configure(baseConfig="TestConfig")
+        frontend.app.log_exception = mock.Mock()
 
     class UnknownException(Exception):
         pass
 
     def getGa4ghException(self, data):
-        return protocol.GAException.fromJsonString(data)
+        return protocol.fromJson(data, protocol.GAException)
 
     def testObjectNotFoundException(self):
         exception = exceptions.ObjectNotFoundException()
         response = frontend.handleException(exception)
         self.assertEquals(response.status_code, 404)
+        self.assertFalse(frontend.app.log_exception.called)
 
     def testCallSetNotInVariantSetException(self):
         exception = exceptions.CallSetNotInVariantSetException(
@@ -40,6 +43,7 @@ class TestExceptionHandler(unittest.TestCase):
         self.assertEquals(response.status_code, 404)
         gaException = self.getGa4ghException(response.data)
         self.assertGreater(len(gaException.message), 0)
+        self.assertFalse(frontend.app.log_exception.called)
 
     def testUnknownExceptionBecomesServerError(self):
         exception = self.UnknownException()
@@ -47,6 +51,7 @@ class TestExceptionHandler(unittest.TestCase):
         self.assertEquals(response.status_code, 500)
         gaException = self.getGa4ghException(response.data)
         self.assertEquals(gaException.message, exceptions.ServerError.message)
+        self.assertTrue(frontend.app.log_exception.called)
 
     def testNotImplementedException(self):
         message = "A string unlikely to occur at random."
@@ -55,6 +60,7 @@ class TestExceptionHandler(unittest.TestCase):
         self.assertEquals(response.status_code, 501)
         gaException = self.getGa4ghException(response.data)
         self.assertEquals(gaException.message, message)
+        self.assertFalse(frontend.app.log_exception.called)
 
 
 def isClassAndBaseServerExceptionSubclass(class_):
@@ -90,19 +96,17 @@ class TestExceptionConsistency(unittest.TestCase):
             # some exceptions are becoming too complicated to instantiate
             # like the rest of the exceptions; just do them manually
             if class_ == exceptions.RequestValidationFailureException:
-                wrongString = "thisIsWrong"
                 objClass = protocol.SearchReadsRequest
                 obj = objClass()
-                obj.start = wrongString
-                jsonDict = obj.toJsonDict()
+                obj.start = -1
+                jsonDict = protocol.toJsonDict(obj)
                 args = (jsonDict, objClass)
             elif class_ == exceptions.ResponseValidationFailureException:
                 objClass = protocol.SearchReadsResponse
                 obj = objClass()
-                obj.alignments = [protocol.ReadAlignment()]
-                obj.alignments[0].alignment = protocol.LinearAlignment()
-                obj.alignments[0].alignment.mappingQuality = wrongString
-                jsonDict = obj.toJsonDict()
+                obj.alignments.extend([protocol.ReadAlignment()])
+                obj.alignments[0].alignment.mapping_quality = -1
+                jsonDict = protocol.toJsonDict(obj)
                 args = (jsonDict, objClass)
             else:
                 numInitArgs = len(inspect.getargspec(
@@ -121,6 +125,7 @@ class TestExceptionConsistency(unittest.TestCase):
             self.assertEqual(class_, exceptions.getExceptionClass(code))
 
 
+@unittest.skip("Protobuf already does validation")
 class TestValidationExceptions(unittest.TestCase):
     """
     Tests for exceptions that occur when validation fails.
@@ -142,9 +147,8 @@ class TestValidationExceptions(unittest.TestCase):
         # ResponseValidationFailureException
         objClass = protocol.SearchReadsResponse
         obj = objClass()
-        obj.alignments = [protocol.ReadAlignment()]
-        obj.alignments[0].alignment = protocol.LinearAlignment()
-        obj.alignments[0].alignment.mappingQuality = wrongString
+        obj.alignments.extend([protocol.ReadAlignment()])
+        obj.alignments[0].alignment.mapping_quality = wrongString
         jsonDict = obj.toJsonDict()
         instance = exceptions.ResponseValidationFailureException(
             jsonDict, objClass)

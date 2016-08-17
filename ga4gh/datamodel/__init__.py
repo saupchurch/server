@@ -9,8 +9,6 @@ from __future__ import unicode_literals
 import json
 import base64
 import collections
-import glob
-import os
 
 import ga4gh.exceptions as exceptions
 
@@ -154,7 +152,9 @@ class CompoundId(object):
             localIds = localIds[:differentiatorIndex] + tuple([
                 self.differentiator]) + localIds[differentiatorIndex:]
         for field, localId in zip(self.fields[index:], localIds):
-            encodedLocalId = self.encode(str(localId))
+            if not isinstance(localId, basestring):
+                raise exceptions.BadIdentifierNotStringException(localId)
+            encodedLocalId = self.encode(localId)
             setattr(self, field, encodedLocalId)
         if len(localIds) != len(self.fields) - index:
             raise ValueError(
@@ -255,7 +255,8 @@ class CompoundId(object):
         fashion. This is not intended for security purposes, but rather to
         dissuade users from depending on our internal ID structures.
         """
-        return base64.urlsafe_b64encode(str(idStr)).replace(b'=', b'')
+        return unicode(base64.urlsafe_b64encode(
+            idStr.encode('utf-8')).replace(b'=', b''))
 
     @classmethod
     def deobfuscate(cls, data):
@@ -264,6 +265,9 @@ class CompoundId(object):
         If an identifier arrives without correct base64 padding this
         function will append it to the end.
         """
+        # the str() call is necessary to convert the unicode string
+        # to an ascii string since the urlsafe_b64decode method
+        # sometimes chokes on unicode strings
         return base64.urlsafe_b64decode(str((
             data + b'A=='[(len(data) - 1) % 4:])))
 
@@ -280,8 +284,8 @@ class ReferenceSetCompoundId(CompoundId):
     """
     The compound ID for reference sets.
     """
-    fields = ['referenceSet']
-    containerIds = [('referenceSetId', 0)]
+    fields = ['reference_set']
+    containerIds = [('reference_set_id', 0)]
 
 
 class ReferenceCompoundId(ReferenceSetCompoundId):
@@ -296,7 +300,7 @@ class DatasetCompoundId(CompoundId):
     The compound id for a data set
     """
     fields = ['dataset']
-    containerIds = [('datasetId', 0)]
+    containerIds = [('dataset_id', 0)]
 
 
 class VariantSetCompoundId(DatasetCompoundId):
@@ -304,18 +308,38 @@ class VariantSetCompoundId(DatasetCompoundId):
     The compound id for a variant set
     """
     fields = DatasetCompoundId.fields + [
-        CompoundId.differentiatorFieldName, 'variantSet']
-    containerIds = DatasetCompoundId.containerIds + [('variantSetId', 2)]
+        CompoundId.differentiatorFieldName, 'variant_set']
+    containerIds = DatasetCompoundId.containerIds + [('variant_set_id', 2)]
     differentiator = 'vs'
+
+
+class IndividualCompoundId(DatasetCompoundId):
+    """
+    The compound id for an individual
+    """
+    fields = DatasetCompoundId.fields + [
+        CompoundId.differentiatorFieldName, 'individual']
+    containerIds = DatasetCompoundId.containerIds + [('individual_id', 2)]
+    differentiator = 'i'
+
+
+class BioSampleCompoundId(DatasetCompoundId):
+    """
+    The compound id for a biosample
+    """
+    fields = DatasetCompoundId.fields + [
+        CompoundId.differentiatorFieldName, 'biosample']
+    containerIds = DatasetCompoundId.containerIds + [('bio_sample_id', 2)]
+    differentiator = 'b'
 
 
 class VariantAnnotationSetCompoundId(VariantSetCompoundId):
     """
     The compound id for a variant annotation set
     """
-    fields = VariantSetCompoundId.fields + ['variantAnnotationSet']
+    fields = VariantSetCompoundId.fields + ['variant_annotation_set']
     containerIds = VariantSetCompoundId.containerIds + [
-        ('variantAnnotationSetId', 3)]
+        ('variant_annotation_set_id', 3)]
 
 
 class VariantSetMetadataCompoundId(VariantSetCompoundId):
@@ -324,14 +348,14 @@ class VariantSetMetadataCompoundId(VariantSetCompoundId):
     """
     fields = VariantSetCompoundId.fields + ['key']
     containerIds = VariantSetCompoundId.containerIds + [
-        ('variantSetMetadataId', 2)]
+        ('variant_set_metadata_id', 2)]
 
 
 class VariantCompoundId(VariantSetCompoundId):
     """
     The compound id for a variant
     """
-    fields = VariantSetCompoundId.fields + ['referenceName', 'start', 'md5']
+    fields = VariantSetCompoundId.fields + ['reference_name', 'start', 'md5']
 
 
 class VariantAnnotationCompoundId(VariantAnnotationSetCompoundId):
@@ -339,7 +363,7 @@ class VariantAnnotationCompoundId(VariantAnnotationSetCompoundId):
     The compound id for a variant annotaiton
     """
     fields = VariantAnnotationSetCompoundId.fields + [
-        'referenceName', 'start', 'md5']
+        'reference_name', 'start', 'md5']
 
 
 class VariantAnnotationSetAnalysisCompoundId(VariantAnnotationSetCompoundId):
@@ -360,8 +384,8 @@ class FeatureSetCompoundId(DatasetCompoundId):
     """
     The compound id for a feature set
     """
-    fields = DatasetCompoundId.fields + ['featureSet']
-    containerIds = DatasetCompoundId.containerIds + [('featureSetId', 1)]
+    fields = DatasetCompoundId.fields + ['feature_set']
+    containerIds = DatasetCompoundId.containerIds + [('feature_set_id', 1)]
 
 
 class FeatureCompoundId(FeatureSetCompoundId):
@@ -376,8 +400,8 @@ class ReadGroupSetCompoundId(DatasetCompoundId):
     The compound id for a read group set
     """
     fields = DatasetCompoundId.fields + [
-        CompoundId.differentiatorFieldName, 'readGroupSet']
-    containerIds = DatasetCompoundId.containerIds + [('readGroupSetId', 2)]
+        CompoundId.differentiatorFieldName, 'read_group_set']
+    containerIds = DatasetCompoundId.containerIds + [('read_group_set_id', 2)]
     differentiator = 'rgs'
 
 
@@ -385,8 +409,8 @@ class ReadGroupCompoundId(ReadGroupSetCompoundId):
     """
     The compound id for a read group
     """
-    fields = ReadGroupSetCompoundId.fields + ['readGroup']
-    containerIds = ReadGroupSetCompoundId.containerIds + [('readGroupId', 3)]
+    fields = ReadGroupSetCompoundId.fields + ['read_group']
+    containerIds = ReadGroupSetCompoundId.containerIds + [('read_group_id', 3)]
 
 
 class ExperimentCompoundId(ReadGroupCompoundId):
@@ -394,16 +418,41 @@ class ExperimentCompoundId(ReadGroupCompoundId):
     The compound id for an experiment
     """
     fields = ReadGroupCompoundId.fields + ['experiment']
-    containerIds = ReadGroupCompoundId.containerIds + [('experimentId', 3)]
+    containerIds = ReadGroupCompoundId.containerIds + [('experiment_id', 3)]
 
 
 class ReadAlignmentCompoundId(ReadGroupSetCompoundId):
     """
     The compound id for a read alignment
     """
-    fields = ReadGroupSetCompoundId.fields + ['readAlignment']
+    fields = ReadGroupSetCompoundId.fields + ['read_alignment']
     containerIds = ReadGroupSetCompoundId.containerIds + \
-        [('readAlignmentId', 2)]
+        [('read_alignment_id', 2)]
+
+
+class RnaQuantificationSetCompoundId(DatasetCompoundId):
+    """
+    The compound id for a rna quantification
+    """
+    fields = DatasetCompoundId.fields + ['rna_quantification_set']
+    container = [('rna_quantification_set_id', 1)]
+    containerIds = DatasetCompoundId.containerIds + container
+
+
+class RnaQuantificationCompoundId(RnaQuantificationSetCompoundId):
+    """
+    The compound id for a rna quantification
+    """
+    fields = RnaQuantificationSetCompoundId.fields + ['rna_quantification']
+    container = [('rna_quantification_id', 2)]
+    containerIds = RnaQuantificationSetCompoundId.containerIds + container
+
+
+class ExpressionLevelCompoundId(RnaQuantificationCompoundId):
+    """
+    The compound id for a expression level
+    """
+    fields = RnaQuantificationCompoundId.fields + ['expression_level_id']
 
 
 class DatamodelObject(object):
@@ -547,41 +596,6 @@ class PysamDatamodelMixin(object):
         if len(attr) > cls.maxStringLength:
             attr = attr[:cls.maxStringLength]
         return attr
-
-    def _setAccessTimes(self, directoryPath):
-        """
-        Sets the creationTime and accessTime for this file system based
-        DatamodelObject. This is derived from the ctime of the specified
-        directoryPath.
-        """
-        ctimeInMillis = int(os.path.getctime(directoryPath) * 1000)
-        self._creationTime = ctimeInMillis
-        self._updatedTime = ctimeInMillis
-
-    def _scanDataFiles(self, dataDir, patterns):
-        """
-        Scans the specified directory for files with the specified globbing
-        pattern and calls self._addDataFile for each. Raises an
-        EmptyDirException if no data files are found.
-        """
-        numDataFiles = 0
-        filenames = self._getDataFilenames(dataDir, patterns)
-        for filename in filenames:
-            self._addDataFile(filename)
-            numDataFiles += 1
-        if numDataFiles == 0:
-            raise exceptions.EmptyDirException(dataDir, patterns)
-
-    def _getDataFilenames(self, dataDir, patterns):
-        """
-        Return a list of filenames in dataDir that match one of patterns
-        """
-        filenames = []
-        for pattern in patterns:
-            scanPath = os.path.join(dataDir, pattern)
-            for filename in glob.glob(scanPath):
-                filenames.append(filename)
-        return filenames
 
     def getFileHandle(self, dataFile):
         return fileHandleCache.getFileHandle(dataFile, self.openFile)

@@ -168,8 +168,20 @@ class ServerStatus(object):
         """
         Returns the list of ReferenceSets for this server.
         """
+        # TODO this should be displayed per-variant set, not per dataset.
+        variantAnnotationSets = []
+        dataset = app.backend.getDataRepository().getDataset(datasetId)
+        for variantSet in dataset.getVariantSets():
+            variantAnnotationSets.extend(
+                variantSet.getVariantAnnotationSets())
+        return variantAnnotationSets
+
+    def getRnaQuantificationSets(self, datasetId):
+        """
+        Returns the list of RnaQuantificationSets for this server.
+        """
         return app.backend.getDataRepository().getDataset(
-            datasetId).getVariantAnnotationSets()
+            datasetId).getRnaQuantificationSets()
 
 
 def reset():
@@ -205,7 +217,7 @@ def configure(configFile=None, baseConfig="ProductionConfig",
     app.serverStatus = ServerStatus()
     # Allocate the backend
     # We use URLs to specify the backend. Currently we have file:// URLs (or
-    # URLs with no scheme) for the FileSystemBackend, and special empty:// and
+    # URLs with no scheme) for the SqlDataRepository, and special empty:// and
     # simulated:// URLs for empty or simulated data sources.
     dataSource = urlparse.urlparse(app.config["DATA_SOURCE"], "file")
 
@@ -223,18 +235,26 @@ def configure(configFile=None, baseConfig="ProductionConfig",
             "SIMULATED_BACKEND_NUM_ALIGNMENTS_PER_READ_GROUP"]
         numReadGroupsPerReadGroupSet = app.config[
             "SIMULATED_BACKEND_NUM_READ_GROUPS_PER_READ_GROUP_SET"]
+        numRnaQuantSets = app.config[
+            "SIMULATED_BACKEND_NUM_RNA_QUANTIFICATION_SETS"]
+        numExpressionLevels = app.config[
+            "SIMULATED_BACKEND_NUM_EXPRESSION_LEVELS_PER_RNA_QUANT_SET"]
+
         dataRepository = datarepo.SimulatedDataRepository(
             randomSeed=randomSeed, numCalls=numCalls,
             variantDensity=variantDensity, numVariantSets=numVariantSets,
             numReferenceSets=numReferenceSets,
             numReferencesPerReferenceSet=numReferencesPerReferenceSet,
             numReadGroupsPerReadGroupSet=numReadGroupsPerReadGroupSet,
-            numAlignments=numAlignmentsPerReadGroup)
+            numAlignments=numAlignmentsPerReadGroup,
+            numRnaQuantSets=numRnaQuantSets,
+            numExpressionLevels=numExpressionLevels)
     elif dataSource.scheme == "empty":
         dataRepository = datarepo.EmptyDataRepository()
     elif dataSource.scheme == "file":
-        dataRepository = datarepo.FileSystemDataRepository(os.path.join(
-            dataSource.netloc, dataSource.path))
+        path = os.path.join(dataSource.netloc, dataSource.path)
+        dataRepository = datarepo.SqlDataRepository(path)
+        dataRepository.open(datarepo.MODE_READ)
     else:
         raise exceptions.ConfigurationException(
             "Unsupported data source scheme: " + dataSource.scheme)
@@ -342,12 +362,14 @@ def handleException(exception):
     Handles an exception that occurs somewhere in the process of handling
     a request.
     """
-    with app.test_request_context():
-        app.log_exception(exception)
     serverException = exception
     if not isinstance(exception, exceptions.BaseServerException):
+        with app.test_request_context():
+            app.log_exception(exception)
         serverException = exceptions.getServerError(exception)
-    responseStr = serverException.toProtocolElement().toJsonString()
+    error = serverException.toProtocolElement()
+    responseStr = protocol.toJson(error)
+
     return getFlaskResponse(responseStr, serverException.httpStatus)
 
 
@@ -472,6 +494,13 @@ def index():
     return flask.render_template('index.html', info=app.serverStatus)
 
 
+@app.route('/favicon.ico')
+@app.route('/robots.txt')
+def robots():
+    return flask.send_from_directory(
+        app.static_folder, flask.request.path[1:])
+
+
 @DisplayedRoute('/references/<id>')
 def getReference(id):
     return handleFlaskGetRequest(
@@ -562,6 +591,52 @@ def searchFeatures():
         flask.request, app.backend.runSearchFeatures)
 
 
+@DisplayedRoute('/biosamples/search', postMethod=True)
+def searchBioSamples():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchBioSamples)
+
+
+@DisplayedRoute('/individuals/search', postMethod=True)
+def searchIndividuals():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchIndividuals)
+
+
+@DisplayedRoute(
+    '/biosamples/<no(search):id>',
+    pathDisplay='/biosamples/<id>')
+def getBioSample(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetBioSample)
+
+
+@DisplayedRoute(
+    '/individuals/<no(search):id>',
+    pathDisplay='/individuals/<id>')
+def getIndividual(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetIndividual)
+
+
+@DisplayedRoute('/rnaquantificationsets/search', postMethod=True)
+def searchRnaQuantificationSets():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchRnaQuantificationSets)
+
+
+@DisplayedRoute('/rnaquantifications/search', postMethod=True)
+def searchRnaQuantifications():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchRnaQuantifications)
+
+
+@DisplayedRoute('/expressionlevels/search', postMethod=True)
+def searchExpressionLevels():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchExpressionLevels)
+
+
 @DisplayedRoute(
     '/variantsets/<no(search):id>',
     pathDisplay='/variantsets/<id>')
@@ -614,6 +689,30 @@ def getFeatureSet(id):
 def getFeature(id):
     return handleFlaskGetRequest(
         id, flask.request, app.backend.runGetFeature)
+
+
+@DisplayedRoute(
+    '/rnaquantificationsets/<no(search):id>',
+    pathDisplay='/rnaquantificationsets/<id>')
+def getRnaQuantificationSet(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetRnaQuantificationSet)
+
+
+@DisplayedRoute(
+    '/rnaquantifications/<no(search):id>',
+    pathDisplay='/rnaquantifications/<id>')
+def getRnaQuantification(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetRnaQuantification)
+
+
+@DisplayedRoute(
+    '/expressionlevels/<no(search):id>',
+    pathDisplay='/expressionlevels/<id>')
+def getExpressionLevel(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetExpressionLevel)
 
 
 @app.route('/oauth2callback', methods=['GET'])

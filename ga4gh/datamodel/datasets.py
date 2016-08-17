@@ -5,36 +5,57 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import fnmatch
-import json
-import os
-
 import ga4gh.datamodel as datamodel
 import ga4gh.datamodel.reads as reads
 import ga4gh.datamodel.sequenceAnnotations as sequenceAnnotations
 import ga4gh.datamodel.variants as variants
 import ga4gh.exceptions as exceptions
 import ga4gh.protocol as protocol
+import ga4gh.datamodel.bio_metadata as biodata
+import ga4gh.datamodel.rna_quantification as rnaQuantification
+from ga4gh import pb
 
 
-class AbstractDataset(datamodel.DatamodelObject):
+class Dataset(datamodel.DatamodelObject):
     """
     The base class of datasets containing variants and reads
     """
     compoundIdClass = datamodel.DatasetCompoundId
 
     def __init__(self, localId):
-        super(AbstractDataset, self).__init__(None, localId)
+        super(Dataset, self).__init__(None, localId)
+        self._description = None
         self._variantSetIds = []
         self._variantSetIdMap = {}
+        self._variantSetNameMap = {}
         self._featureSetIds = []
         self._featureSetIdMap = {}
+        self._featureSetNameMap = {}
         self._readGroupSetIds = []
         self._readGroupSetIdMap = {}
         self._readGroupSetNameMap = {}
-        self._variantAnnotationSetIds = []
-        self._variantAnnotationSetIdMap = {}
-        self._description = None
+        self._bioSampleIds = []
+        self._bioSampleIdMap = {}
+        self._bioSampleNameMap = {}
+        self._individualIds = []
+        self._individualIdMap = {}
+        self._individualNameMap = {}
+        self._rnaQuantificationSetIds = []
+        self._rnaQuantificationSetIdMap = {}
+        self._rnaQuantificationSetNameMap = {}
+
+    def populateFromRow(self, row):
+        """
+        Populates the instance variables of this Dataset from the
+        specified database row.
+        """
+        self._description = row[b'description']
+
+    def setDescription(self, description):
+        """
+        Sets the description for this dataset to the specified value.
+        """
+        self._description = description
 
     def addVariantSet(self, variantSet):
         """
@@ -42,15 +63,26 @@ class AbstractDataset(datamodel.DatamodelObject):
         """
         id_ = variantSet.getId()
         self._variantSetIdMap[id_] = variantSet
+        self._variantSetNameMap[variantSet.getLocalId()] = variantSet
         self._variantSetIds.append(id_)
 
-    def addVariantAnnotationSet(self, variantAnnotationSet):
+    def addBioSample(self, bioSample):
         """
-        Adds the specified variantAnnotationSet to this dataset.
+        Adds the specified bioSample to this dataset.
         """
-        id_ = variantAnnotationSet.getId()
-        self._variantAnnotationSetIdMap[id_] = variantAnnotationSet
-        self._variantAnnotationSetIds.append(id_)
+        id_ = bioSample.getId()
+        self._bioSampleIdMap[id_] = bioSample
+        self._bioSampleIds.append(id_)
+        self._bioSampleNameMap[bioSample.getName()] = bioSample
+
+    def addIndividual(self, individual):
+        """
+        Adds the specified individual to this dataset.
+        """
+        id_ = individual.getId()
+        self._individualIdMap[id_] = individual
+        self._individualIds.append(id_)
+        self._individualNameMap[individual.getName()] = individual
 
     def addFeatureSet(self, featureSet):
         """
@@ -59,6 +91,8 @@ class AbstractDataset(datamodel.DatamodelObject):
         id_ = featureSet.getId()
         self._featureSetIdMap[id_] = featureSet
         self._featureSetIds.append(id_)
+        name = featureSet.getLocalId()
+        self._featureSetNameMap[name] = featureSet
 
     def addReadGroupSet(self, readGroupSet):
         """
@@ -69,11 +103,21 @@ class AbstractDataset(datamodel.DatamodelObject):
         self._readGroupSetNameMap[readGroupSet.getLocalId()] = readGroupSet
         self._readGroupSetIds.append(id_)
 
+    def addRnaQuantificationSet(self, rnaQuantSet):
+        """
+        Adds the specified rnaQuantification set to this dataset.
+        """
+        id_ = rnaQuantSet.getId()
+        self._rnaQuantificationSetIdMap[id_] = rnaQuantSet
+        self._rnaQuantificationSetIds.append(id_)
+        name = rnaQuantSet.getLocalId()
+        self._rnaQuantificationSetNameMap[name] = rnaQuantSet
+
     def toProtocolElement(self):
         dataset = protocol.Dataset()
         dataset.id = self.getId()
-        dataset.name = self.getLocalId()
-        dataset.description = self.getDescription()
+        dataset.name = pb.string(self.getLocalId())
+        dataset.description = pb.string(self.getDescription())
         return dataset
 
     def getVariantSets(self):
@@ -87,27 +131,6 @@ class AbstractDataset(datamodel.DatamodelObject):
         Returns the number of variant sets in this dataset.
         """
         return len(self._variantSetIds)
-
-    def getVariantAnnotationSets(self):
-        """
-        Returns the list of VariantAnnotationSets in this dataset
-        """
-        return [self._variantAnnotationSetIdMap[id_] for id_ in
-                self._variantAnnotationSetIds]
-
-    def getVariantAnnotationSet(self, id_):
-        """
-        Returns the AnnotationSet in this dataset with the specified 'id'
-        """
-        if id_ not in self._variantAnnotationSetIdMap:
-            raise exceptions.AnnotationSetNotFoundException(id_)
-        return self._variantAnnotationSetIdMap[id_]
-
-    def getNumVariantAnnotationSets(self):
-        """
-        Returns the number of variant annotation sets in this dataset.
-        """
-        return len(self._variantAnnotationSetIds)
 
     def getVariantSet(self, id_):
         """
@@ -124,13 +147,14 @@ class AbstractDataset(datamodel.DatamodelObject):
         """
         return self._variantSetIdMap[self._variantSetIds[index]]
 
-    def getVariantAnnotationSetByIndex(self, index):
+    def getVariantSetByName(self, name):
         """
-        Returns the variant annotation set at the specified index in this
-        dataset.
+        Returns a VariantSet with the specified name, or raises a
+        VariantSetNameNotFoundException if it does not exist.
         """
-        return self._variantAnnotationSetIdMap[
-            self._variantAnnotationSetIds[index]]
+        if name not in self._variantSetNameMap:
+            raise exceptions.VariantSetNameNotFoundException(name)
+        return self._variantSetNameMap[name]
 
     def getFeatureSets(self):
         """
@@ -146,18 +170,99 @@ class AbstractDataset(datamodel.DatamodelObject):
 
     def getFeatureSet(self, id_):
         """
-        Returns the FeatureSet with the specified name, or raises a
+        Returns the FeatureSet with the specified id, or raises a
         FeatureSetNotFoundException otherwise.
         """
         if id_ not in self._featureSetIdMap:
             raise exceptions.FeatureSetNotFoundException(id_)
         return self._featureSetIdMap[id_]
 
+    def getFeatureSetByName(self, name):
+        """
+        Returns the FeatureSet with the specified name, or raises
+        an exception otherwise.
+        """
+        if name not in self._featureSetNameMap:
+            raise exceptions.FeatureSetNameNotFoundException(name)
+        return self._featureSetNameMap[name]
+
     def getFeatureSetByIndex(self, index):
         """
         Returns the feature set at the specified index in this dataset.
         """
         return self._featureSetIdMap[self._featureSetIds[index]]
+
+    def getNumBioSamples(self):
+        """
+        Returns the number of biosamples sets in this dataset.
+        """
+        return len(self._bioSampleIds)
+
+    def getBioSamples(self):
+        """
+        Returns the list of biosamples in this dataset
+        """
+        return [self._bioSampleIdMap[id_] for id_ in self._bioSampleIds]
+
+    def getBioSampleByName(self, name):
+        """
+        Returns a BioSample with the specified name, or raises a
+        BioSampleNameNotFoundException if it does not exist.
+        """
+        if name not in self._bioSampleNameMap:
+            raise exceptions.BioSampleNameNotFoundException(name)
+        return self._bioSampleNameMap[name]
+
+    def getBioSampleByIndex(self, index):
+        """
+        Returns the biosample at the specified index in this dataset.
+        """
+        return self._bioSampleIdMap[self._bioSampleIds[index]]
+
+    def getBioSample(self, id_):
+        """
+        Returns the BioSample with the specified id, or raises
+        a BioSampleNotFoundException otherwise.
+        """
+        if id_ not in self._bioSampleIdMap:
+            raise exceptions.BioSampleNotFoundException(id_)
+        return self._bioSampleIdMap[id_]
+
+    def getNumIndividuals(self):
+        """
+        Returns the number of individuals sets in this dataset.
+        """
+        return len(self._individualIds)
+
+    def getIndividuals(self):
+        """
+        Returns the list of individuals in this dataset
+        """
+        return [self._individualIdMap[id_] for id_ in self._individualIds]
+
+    def getIndividualByName(self, name):
+        """
+        Returns an individual with the specified name, or raises a
+        IndividualNameNotFoundException if it does not exist.
+        """
+        if name not in self._individualNameMap:
+            raise exceptions.IndividualNameNotFoundException(name)
+        return self._individualNameMap[name]
+
+    def getIndividualByIndex(self, index):
+        """
+        Returns the individual at the specified index in this dataset.
+        """
+        return self._individualIdMap[self._individualIds[index]]
+
+    def getIndividual(self, id_):
+        """
+        Returns the Individual with the specified id, or raises
+        a IndividualNotFoundException otherwise.
+        """
+        if id_ not in self._individualIdMap:
+            raise exceptions.IndividualNotFoundException(id_)
+        return self._individualIdMap[id_]
 
     def getNumReadGroupSets(self):
         """
@@ -201,26 +306,47 @@ class AbstractDataset(datamodel.DatamodelObject):
         """
         return self._description
 
-    def getRnaQuantificationIds(self):
+    def getNumRnaQuantificationSets(self):
         """
-        Return a list of ids of rna quants that this dataset has
+        Returns the number of rna quantification sets in this dataset.
         """
-        return self._rnaQuantificationIds
+        return len(self._rnaQuantificationSetIds)
 
-    def getRnaQuantificationIdMap(self):
+    def getRnaQuantificationSets(self):
         """
-        Return a map of the dataset's rna quant ids to rna quants
+        Returns the list of RnaQuantification sets in this dataset
         """
-        return self._rnaQuantificationIdMap
+        return [self._rnaQuantificationSetIdMap[id_] for
+                id_ in self._rnaQuantificationSetIds]
 
-    def getRnaQuantifications(self):
+    def getRnaQuantificationSetByIndex(self, index):
         """
-        Returns the list of RnaQuantifications in this dataset
+        Returns the rna quantification set at the specified index in this
+        dataset.
         """
-        return self._rnaQuantificationIdMap.values()
+        return self._rnaQuantificationSetIdMap[
+            self._rnaQuantificationSetIds[index]]
+
+    def getRnaQuantificationSetByName(self, name):
+        """
+        Returns the RnaQuantification set with the specified name, or raises
+        an exception otherwise.
+        """
+        if name not in self._rnaQuantificationSetNameMap:
+            raise exceptions.RnaQuantificationSetNameNotFoundException(name)
+        return self._rnaQuantificationSetNameMap[name]
+
+    def getRnaQuantificationSet(self, id_):
+        """
+        Returns the RnaQuantification set with the specified name, or raises
+        a RnaQuantificationSetNotFoundException otherwise.
+        """
+        if id_ not in self._rnaQuantificationSetIdMap:
+            raise exceptions.RnaQuantificationSetNotFoundException(id_)
+        return self._rnaQuantificationSetIdMap[id_]
 
 
-class SimulatedDataset(AbstractDataset):
+class SimulatedDataset(Dataset):
     """
     A simulated dataset
     """
@@ -228,19 +354,35 @@ class SimulatedDataset(AbstractDataset):
             self, localId, referenceSet, randomSeed=0,
             numVariantSets=1, numCalls=1, variantDensity=0.5,
             numReadGroupSets=1, numReadGroupsPerReadGroupSet=1,
-            numAlignments=1, numFeatureSets=1):
+            numAlignments=1, numFeatureSets=1, numRnaQuantSets=2,
+            numExpressionLevels=2):
         super(SimulatedDataset, self).__init__(localId)
         self._description = "Simulated dataset {}".format(localId)
+        # TODO create a simulated Ontology
         # Variants
         for i in range(numVariantSets):
             localId = "simVs{}".format(i)
             seed = randomSeed + i
             variantSet = variants.SimulatedVariantSet(
-                self, localId, seed, numCalls, variantDensity)
+                self, referenceSet, localId, seed, numCalls, variantDensity)
+            callSets = variantSet.getCallSets()
+            # Add biosamples
+            for callSet in callSets:
+                bioSample = biodata.BioSample(
+                    self, callSet.getLocalId())
+                bioSample2 = biodata.BioSample(
+                    self, callSet.getLocalId() + "2")
+                individual = biodata.Individual(
+                    self, callSet.getLocalId())
+                bioSample.setIndividualId(individual.getId())
+                bioSample2.setIndividualId(individual.getId())
+                self.addIndividual(individual)
+                self.addBioSample(bioSample)
+                self.addBioSample(bioSample2)
             self.addVariantSet(variantSet)
             variantAnnotationSet = variants.SimulatedVariantAnnotationSet(
-                self, "simVas{}".format(i), variantSet)
-            self.addVariantAnnotationSet(variantAnnotationSet)
+                variantSet, "simVas{}".format(i), seed)
+            variantSet.addVariantAnnotationSet(variantAnnotationSet)
         # Reads
         for i in range(numReadGroupSets):
             localId = 'simRgs{}'.format(i)
@@ -248,6 +390,15 @@ class SimulatedDataset(AbstractDataset):
             readGroupSet = reads.SimulatedReadGroupSet(
                 self, localId, referenceSet, seed,
                 numReadGroupsPerReadGroupSet, numAlignments)
+            for rg in readGroupSet.getReadGroups():
+                bioSample = biodata.BioSample(
+                    self, rg.getLocalId())
+                individual = biodata.Individual(
+                    self, rg.getLocalId())
+                bioSample.setIndividualId(individual.getId())
+                rg.setBioSampleId(bioSample.getId())
+                self.addIndividual(individual)
+                self.addBioSample(bioSample)
             self.addReadGroupSet(readGroupSet)
         # Features
         for i in range(numFeatureSets):
@@ -255,63 +406,12 @@ class SimulatedDataset(AbstractDataset):
             seed = randomSeed + i
             featureSet = sequenceAnnotations.SimulatedFeatureSet(
                 self, localId, seed)
+            featureSet.setReferenceSet(referenceSet)
             self.addFeatureSet(featureSet)
-
-
-class FileSystemDataset(AbstractDataset):
-    """
-    A dataset based on the file system
-    """
-    variantsDirName = "variants"
-    readsDirName = "reads"
-    featuresDirName = "sequenceAnnotations"
-
-    def __init__(self, localId, dataDir, dataRepository):
-        super(FileSystemDataset, self).__init__(localId)
-        self._dataDir = dataDir
-        self._setMetadata()
-
-        # Variants
-        variantSetDir = os.path.join(dataDir, self.variantsDirName)
-        for localId in os.listdir(variantSetDir):
-            relativePath = os.path.join(variantSetDir, localId)
-            if os.path.isdir(relativePath):
-                variantSet = variants.HtslibVariantSet(
-                    self, localId, relativePath, dataRepository)
-                self.addVariantSet(variantSet)
-            # Variant annotations sets
-                if variantSet.isAnnotated(relativePath):
-                    variantAnnotationSet = variants.HtslibVariantAnnotationSet(
-                            self, localId, relativePath, dataRepository,
-                            variantSet)
-                    self.addVariantAnnotationSet(variantAnnotationSet)
-
-        # Reads
-        readGroupSetDir = os.path.join(dataDir, self.readsDirName)
-        for filename in os.listdir(readGroupSetDir):
-            if fnmatch.fnmatch(filename, '*.bam'):
-                localId, _ = os.path.splitext(filename)
-                bamPath = os.path.join(readGroupSetDir, filename)
-                readGroupSet = reads.HtslibReadGroupSet(
-                    self, localId, bamPath, dataRepository)
-                self.addReadGroupSet(readGroupSet)
-        # Sequence Annotations
-        featureSetDir = os.path.join(dataDir, self.featuresDirName)
-        for filename in os.listdir(featureSetDir):
-            if fnmatch.fnmatch(filename, '*.db'):
-                localId, _ = os.path.splitext(filename)
-                fullPath = os.path.join(featureSetDir, filename)
-                featureSet = sequenceAnnotations.Gff3DbFeatureSet(
-                    self, localId, fullPath, dataRepository)
-                self.addFeatureSet(featureSet)
-
-    def _setMetadata(self):
-        metadataFileName = '{}.json'.format(self._dataDir)
-        if os.path.isfile(metadataFileName):
-            with open(metadataFileName) as metadataFile:
-                metadata = json.load(metadataFile)
-                try:
-                    self._description = metadata['description']
-                except KeyError as err:
-                    raise exceptions.MissingDatasetMetadataException(
-                        metadataFileName, str(err))
+        # RnaQuantificationSets
+        for i in range(numRnaQuantSets):
+            localId = 'simRqs{}'.format(i)
+            rnaQuantSet = rnaQuantification.SimulatedRnaQuantificationSet(
+                self, localId)
+            rnaQuantSet.setReferenceSet(referenceSet)
+            self.addRnaQuantificationSet(rnaQuantSet)

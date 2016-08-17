@@ -14,6 +14,7 @@ import unittest
 import ga4gh.client as client
 import ga4gh.backend as backend
 import ga4gh.cli as cli
+import ga4gh.protocol as protocol
 import ga4gh.datarepo as datarepo
 import tests.utils as utils
 import tests.paths as paths
@@ -28,11 +29,14 @@ class TestClientOutput(unittest.TestCase):
     """
     def setUp(self):
         self._maxDiff = None
-        self._dataDir = paths.testDataDir
-        self._dataUrl = "file://{}".format(self._dataDir)
-        dataRepository = datarepo.FileSystemDataRepository(self._dataDir)
+        repoPath = paths.testDataRepo
+        self._dataUrl = "file://{}".format(repoPath)
+        dataRepository = datarepo.SqlDataRepository(repoPath)
+        dataRepository.open(datarepo.MODE_READ)
         self._backend = backend.Backend(dataRepository)
         self._client = client.LocalClient(self._backend)
+        # TODO probably could use a cache of objects, so we don't
+        # need to keep re-fetching them
 
     def captureCliOutput(self, command, arguments, outputFormat):
         clientCommand = "{} {} {} -O {}".format(
@@ -53,9 +57,9 @@ class TestClientFasta(TestClientOutput):
         return lines
 
     def testListReferenceBases(self):
-        referenceSetIterator = self._client.searchReferenceSets()
+        referenceSetIterator = self._client.search_reference_sets()
         referenceSet = next(referenceSetIterator)
-        referencesIterator = self._client.searchReferences(referenceSet.id)
+        referencesIterator = self._client.search_references(referenceSet.id)
         reference = next(referencesIterator)
         start = 1
         end = 5
@@ -65,7 +69,7 @@ class TestClientFasta(TestClientOutput):
         self.assertEqual(
             lines[0], ">{}:{}-{}".format(reference.id, start, end))
         cliBases = ''.join(lines[1:])
-        bases = self._client.listReferenceBases(reference.id, start, end)
+        bases = self._client.list_reference_bases(reference.id, start, end)
         self.assertEqual(cliBases, bases)
 
 
@@ -83,7 +87,10 @@ class TestClientJson(TestClientOutput):
         stdout = self.captureCliOutput(command, arguments, "json")
         cliOutput = []
         for line in stdout.splitlines():
-            cliOutput.append(json.loads(line))
+            try:
+                cliOutput.append(json.loads(line))
+            except ValueError, e:
+                raise Exception((e, line, stdout, command, arguments))
         return cliOutput
 
     def verifyParsedOutputsEqual(
@@ -94,108 +101,137 @@ class TestClientJson(TestClientOutput):
         CLI command.
         """
         cliOutput = self.captureJsonOutput(cliCommand, cliArguments)
-        clientOutput = [gaObject.toJsonDict() for gaObject in clientIterator]
+        clientOutput = [protocol.toJsonDict(gObj) for gObj in clientIterator]
         self.assertEqual(clientOutput, cliOutput)
         return len(clientOutput)
 
     def testGetCallSet(self):
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                for callSet in self._client.searchCallSets(variantSet.id):
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                for callSet in self._client.search_call_sets(variantSet.id):
                     self.verifyParsedOutputsEqual(
                         [callSet], "callsets-get", callSet.id)
 
     def testGetDataset(self):
-        for dataset in self._client.searchDatasets():
+        for dataset in self._client.search_datasets():
             self.verifyParsedOutputsEqual(
                 [dataset], "datasets-get", dataset.id)
 
     def testGetReadGroup(self):
-        for dataset in self._client.searchDatasets():
-            for readGroupSet in self._client.searchReadGroupSets(dataset.id):
-                for readGroup in readGroupSet.readGroups:
+        for dataset in self._client.search_datasets():
+            for readGroupSet in self._client.search_read_group_sets(
+                    dataset.id):
+                for readGroup in readGroupSet.read_groups:
                     self.verifyParsedOutputsEqual(
                         [readGroup], "readgroups-get", readGroup.id)
 
     def testGetReadGroupSet(self):
-        for dataset in self._client.searchDatasets():
-            for readGroupSet in self._client.searchReadGroupSets(dataset.id):
+        for dataset in self._client.search_datasets():
+            for readGroupSet in self._client.search_read_group_sets(
+                    dataset.id):
                 self.verifyParsedOutputsEqual(
                     [readGroupSet], "readgroupsets-get", readGroupSet.id)
 
     def testGetReference(self):
-        for referenceSet in self._client.searchReferenceSets():
-            for reference in self._client.searchReferences(referenceSet.id):
+        for referenceSet in self._client.search_reference_sets():
+            for reference in self._client.search_references(
+                    referenceSet.id):
                 self.verifyParsedOutputsEqual(
                     [reference], "references-get", reference.id)
 
     def testGetReferenceSet(self):
-        for referenceSet in self._client.searchReferenceSets():
+        for referenceSet in self._client.search_reference_sets():
             self.verifyParsedOutputsEqual(
                 [referenceSet], "referencesets-get", referenceSet.id)
 
+    @unittest.skip("TODO: clarify semantics of callsets and fix")
     def testGetVariant(self):
         test_executed = 0
         start = 0
         end = 1000
         referenceName = "1"
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                variants = self._client.searchVariants(
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                variants = self._client.search_variants(
                     variantSet.id, start=start, end=end,
-                    referenceName=referenceName)
+                    reference_name=referenceName)
                 for variant in variants:
                     test_executed += self.verifyParsedOutputsEqual(
                         [variant], "variants-get", variant.id)
         self.assertGreater(test_executed, 0)
 
     def testGetVariantAnnotationSet(self):
+        # TODO this doesn't actually test get_variant_annotation_set
         test_executed = 0
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                for annSet in self._client.searchVariantAnnotationSets(
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                for annSet in self._client.search_variant_annotation_sets(
                         variantSet.id):
                     test_executed += self.verifyParsedOutputsEqual(
                         [annSet], "variantannotationsets-get", annSet.id)
         self.assertGreater(test_executed, 0)
 
     def testGetVariantSet(self):
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
                 self.verifyParsedOutputsEqual(
                     [variantSet], "variantsets-get", variantSet.id)
 
     def testSearchCallSets(self):
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                iterator = self._client.searchCallSets(variantSet.id)
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                iterator = self._client.search_call_sets(variantSet.id)
                 args = "--variantSetId {}".format(variantSet.id)
                 self.verifyParsedOutputsEqual(
                     iterator, "callsets-search", args)
 
+    def testGetBioSamples(self):
+        for dataset in self._client.search_datasets():
+            for bioSample in self._client.search_bio_samples(dataset.id):
+                self.verifyParsedOutputsEqual(
+                    [bioSample], "biosamples-get", bioSample.id)
+
+    def testGetIndividuals(self):
+        for dataset in self._client.search_datasets():
+            for individual in self._client.search_individuals(dataset.id):
+                self.verifyParsedOutputsEqual(
+                    [individual], "individuals-get", individual.id)
+
     def testSearchDatasets(self):
-        iterator = self._client.searchDatasets()
+        iterator = self._client.search_datasets()
         self.verifyParsedOutputsEqual(iterator, "datasets-search")
 
     def testSearchReadGroupSets(self):
-        for dataset in self._client.searchDatasets():
-            iterator = self._client.searchReadGroupSets(dataset.id)
+        for dataset in self._client.search_datasets():
+            iterator = self._client.search_read_group_sets(dataset.id)
             self.verifyParsedOutputsEqual(
                 iterator, "readgroupsets-search",
                 "--datasetId {}".format(dataset.id))
+            for readGroupSet in iterator:
+                bioIterator = self._client.search_read_group_sets(
+                    dataset.id,
+                    name=readGroupSet.name,
+                    bio_sample_id=readGroupSet.bioSampleId)
+                self.verifyParsedOutputsEqual(
+                    bioIterator, "readgroupsets-search",
+                    "--datasetId {} --name {} --bioSampleId {}".format(
+                        dataset.id,
+                        readGroupSet.name,
+                        readGroupSet.bioSampleId))
 
     def testSearchReads(self):
         test_executed = 0
         start = 0
-        end = 1000
-        for dataset in self._client.searchDatasets():
-            for readGroupSet in self._client.searchReadGroupSets(dataset.id):
-                for readGroup in readGroupSet.readGroups:
-                    reference = self._client.searchReferences(
-                        referenceSetId=readGroup.referenceSetId).next()
+        end = 1000000
+        for dataset in self._client.search_datasets():
+            for readGroupSet in self._client.search_read_group_sets(
+                    dataset.id):
+                for readGroup in readGroupSet.read_groups:
+                    reference = self._client.search_references(
+                        reference_set_id=readGroup.reference_set_id).next()
                     referenceId = reference.id
-                    iterator = self._client.searchReads(
-                        [readGroup.id], referenceId=referenceId,
+                    iterator = self._client.search_reads(
+                        [readGroup.id], reference_id=referenceId,
                         start=start, end=end)
                     args = "--start {} --end {} --readGroupIds {}\
                     --referenceId {}".format(
@@ -205,19 +241,19 @@ class TestClientJson(TestClientOutput):
         self.assertGreater(test_executed, 0)
 
     def testSearchReferenceSets(self):
-        iterator = self._client.searchReferenceSets()
+        iterator = self._client.search_reference_sets()
         self.verifyParsedOutputsEqual(iterator, "referencesets-search")
 
     def testSearchReferences(self):
-        for referenceSet in self._client.searchReferenceSets():
-            iterator = self._client.searchReferences(
-                referenceSetId=referenceSet.id)
+        for referenceSet in self._client.search_reference_sets():
+            iterator = self._client.search_references(
+                reference_set_id=referenceSet.id)
             args = "--referenceSetId={}".format(referenceSet.id)
             self.verifyParsedOutputsEqual(iterator, "references-search", args)
 
     def testSearchVariantSets(self):
-        for dataset in self._client.searchDatasets():
-            iterator = self._client.searchVariantSets(dataset.id)
+        for dataset in self._client.search_datasets():
+            iterator = self._client.search_variant_sets(dataset.id)
             self.verifyParsedOutputsEqual(iterator, "variantsets-search")
 
     def testSearchVariants(self):
@@ -225,21 +261,57 @@ class TestClientJson(TestClientOutput):
         start = 0
         end = 1000
         referenceName = "1"
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                iterator = self._client.searchVariants(
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                iterator = self._client.search_variants(
                     variantSet.id, start=start, end=end,
-                    referenceName=referenceName, callSetIds=[])
+                    reference_name=referenceName, call_set_ids=[])
                 args = "--variantSetId {} --start {} --end {} -r {}".format(
                     variantSet.id, start, end, referenceName)
                 test_executed += self.verifyParsedOutputsEqual(
                     iterator, "variants-search", args)
         self.assertGreater(test_executed, 0)
 
+    def testSearchBioSamples(self):
+        for dataset in self._client.search_datasets():
+            iterator = self._client.search_bio_samples(dataset.id)
+            self.verifyParsedOutputsEqual(iterator, "biosamples-search")
+        for dataset in self._client.search_datasets():
+            for bioSample in self._client.search_bio_samples(dataset.id):
+                iterator = self._client.search_bio_samples(
+                    dataset.id, bioSample.name)
+                self.verifyParsedOutputsEqual(
+                    iterator,
+                    "biosamples-search",
+                    "--datasetId {} --name {}".format(
+                        dataset.id,
+                        bioSample.name))
+                if bioSample.individualId:
+                    iterator = self._client.search_bio_samples(
+                        dataset.id, individual_id=bioSample.individualId)
+                    self.verifyParsedOutputsEqual(
+                        iterator,
+                        "biosamples-search",
+                        "--datasetId {} --individualId {}".format(
+                            dataset.id,
+                            bioSample.individualId))
+
+    def testSearchIndividuals(self):
+        for dataset in self._client.search_datasets():
+            iterator = self._client.search_individuals(dataset.id)
+            self.verifyParsedOutputsEqual(iterator, "individuals-search")
+        for dataset in self._client.search_datasets():
+            for individual in self._client.search_individuals(dataset.id):
+                iterator = self._client.search_individuals(
+                    dataset.id, individual.name)
+                self.verifyParsedOutputsEqual(
+                    iterator, "individuals-search", "--name {}".format(
+                        individual.name))
+
     def testSearchVariantAnnotationSets(self):
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                iterator = self._client.searchVariantAnnotationSets(
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                iterator = self._client.search_variant_annotation_sets(
                     variantSet.id)
                 args = "{}".format(variantSet.id)
                 self.verifyParsedOutputsEqual(
@@ -250,19 +322,98 @@ class TestClientJson(TestClientOutput):
         start = 0
         end = 10000000
         referenceName = "1"
-        for dataset in self._client.searchDatasets():
-            for variantSet in self._client.searchVariantSets(dataset.id):
-                searchIterator = self._client.searchVariantAnnotationSets(
+        for dataset in self._client.search_datasets():
+            for variantSet in self._client.search_variant_sets(dataset.id):
+                searchIterator = self._client.search_variant_annotation_sets(
                     variantSet.id)
                 for variantAnnotationSet in searchIterator:
-                    iterator = self._client.searchVariantAnnotations(
+                    iterator = self._client.search_variant_annotations(
                         variantAnnotationSet.id,
                         start=start,
                         end=end,
-                        referenceName=referenceName)
+                        reference_name=referenceName)
                     args = ("--variantAnnotationSetId {}"
                             " --start {} --end {} -r {}").format(
                         variantAnnotationSet.id, start, end, referenceName)
                     test_executed += self.verifyParsedOutputsEqual(
                         iterator, "variantannotations-search", args)
         self.assertGreater(test_executed, 0)
+
+    # def testGetFeatures(self):  # TODO
+
+    # def testSearchFeatures(self):  # TODO
+
+    # def testGetFeatureSets(self):  # TODO
+
+    # def testSearchFeatureSets(self):  # TODO
+
+    def testSearchExpressionLevels(self):
+        for dataset in self._client.search_datasets():
+            for rnaQuantificationSet in \
+                    self._client.search_rna_quantification_sets(dataset.id):
+                for rnaQuantification in \
+                        self._client.search_rna_quantifications(
+                                rnaQuantificationSet.id):
+                    iterator = self._client.search_expression_levels(
+                        rnaQuantification.id)
+                    cliString = (
+                        "expressionlevels-search "
+                        "--rnaQuantificationId {}".format(
+                            rnaQuantification.id))
+                    self.verifyParsedOutputsEqual(iterator, cliString)
+
+    def testSearchRnaQuantifications(self):
+        for dataset in self._client.search_datasets():
+            for rnaQuantificationSet in \
+                    self._client.search_rna_quantification_sets(dataset.id):
+                iterator = self._client.search_rna_quantifications(
+                    rnaQuantificationSet.id)
+                cliString = (
+                    "rnaquantifications-search "
+                    "--rnaQuantificationSetId {}".format(
+                        rnaQuantificationSet.id))
+                self.verifyParsedOutputsEqual(iterator, cliString)
+
+    def testSearchRnaQuantificationSets(self):
+        for dataset in self._client.search_datasets():
+            iterator = self._client.search_rna_quantification_sets(dataset.id)
+            cliString = (
+                "rnaquantificationsets-search --datasetId {}".format(
+                    dataset.id))
+            self.verifyParsedOutputsEqual(iterator, cliString)
+
+    def testGetExpressionLevel(self):
+        for dataset in self._client.search_datasets():
+            for rnaQuantificationSet in \
+                    self._client.search_rna_quantification_sets(dataset.id):
+                for rnaQuantification in \
+                        self._client.search_rna_quantifications(
+                            rnaQuantificationSet.id):
+                            for expressionLevel in \
+                                    self._client.search_expression_levels(
+                                        rnaQuantification.id):
+                                self.verifyParsedOutputsEqual(
+                                    [expressionLevel],
+                                    "expressionlevels-get",
+                                    expressionLevel.id)
+
+    def testGetRnaQuantification(self):
+        for dataset in self._client.search_datasets():
+            for rnaQuantificationSet in \
+                    self._client.search_rna_quantification_sets(dataset.id):
+                for rnaQuantification in \
+                        self._client.search_rna_quantifications(
+                            rnaQuantificationSet.id):
+                    self.verifyParsedOutputsEqual(
+                        [rnaQuantification],
+                        "rnaquantifications-get",
+                        rnaQuantification.id)
+
+    def testGetRnaQuantificationSet(self):
+        for dataset in self._client.search_datasets():
+            for rnaQuantificationSet in \
+                    self._client.search_rna_quantification_sets(dataset.id):
+                self.verifyParsedOutputsEqual(
+                    [rnaQuantificationSet],
+                    "rnaquantificationsets-get",
+                    rnaQuantificationSet.id)

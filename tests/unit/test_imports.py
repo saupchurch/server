@@ -156,21 +156,41 @@ class ImportGraphLayerChecker(object):
         'frontend': ['ga4gh/frontend.py', 'ga4gh/repo_manager.py'],
         'backend': ['ga4gh/backend.py', 'ga4gh/datarepo.py'],
         'exceptions': ['ga4gh/exceptions.py'],
-        'datamodel': ['ga4gh/datamodel/reads.py',
+        'datamodel': ['ga4gh/datamodel/bio_metadata.py',
+                      'ga4gh/datamodel/reads.py',
                       'ga4gh/datamodel/references.py',
                       'ga4gh/datamodel/rna_quantification.py',
                       'ga4gh/datamodel/variants.py',
                       'ga4gh/datamodel/datasets.py',
                       'ga4gh/datamodel/ontologies.py',
+                      'ga4gh/datamodel/obo_parser.py',
                       'ga4gh/datamodel/sequenceAnnotations.py',
                       'ga4gh/gff3Parser.py',
                       'ga4gh/sqliteBackend.py'],
         'libraries': ['ga4gh/converters.py',
                       'ga4gh/configtest.py'],
         'protocol': ['ga4gh/protocol.py',
-                     'ga4gh/_protocol_definitions.py'],
+                     'ga4gh/pb.py',
+                     'ga4gh/_protocol_version.py',
+                     'ga4gh/assay_metadata_pb2.py',
+                     'ga4gh/bio_metadata_pb2.py',
+                     'ga4gh/bio_metadata_service_pb2.py',
+                     'ga4gh/common_pb2.py',
+                     'ga4gh/metadata_pb2.py',
+                     'ga4gh/metadata_service_pb2.py',
+                     'ga4gh/read_service_pb2.py',
+                     'ga4gh/reads_pb2.py',
+                     'ga4gh/reference_service_pb2.py',
+                     'ga4gh/references_pb2.py',
+                     'ga4gh/variant_service_pb2.py',
+                     'ga4gh/variants_pb2.py',
+                     'ga4gh/allele_annotations_pb2.py',
+                     'ga4gh/allele_annotation_service_pb2.py',
+                     'ga4gh/sequence_annotations_pb2.py',
+                     'ga4gh/sequence_annotation_service_pb2.py',
+                     'ga4gh/rna_quantification_pb2.py',
+                     'ga4gh/rna_quantification_service_pb2.py'],
         'config': ['ga4gh/serverconfig.py'],
-        'avrotools': ['ga4gh/avrotools.py'],
     }
 
     # each moduleGroupName has one and only one entry here
@@ -182,7 +202,6 @@ class ImportGraphLayerChecker(object):
         ['libraries'],
         ['datamodel'],
         ['exceptions'],
-        ['avrotools'],
         ['config'],
         ['protocol'],
     ]
@@ -320,7 +339,6 @@ class ImportGraphCycleChecker(object):
     # essentially, an entry here removes an edge from the dependency
     # graph as far as cycle detection is concerned
     cycleExclusions = [
-        ['ga4gh/_protocol_definitions.py', 'ga4gh/protocol.py']
     ]
 
     def __init__(self, graph):

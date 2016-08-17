@@ -8,9 +8,13 @@ from __future__ import unicode_literals
 import json
 import mock
 import unittest
+import shlex
 
 import ga4gh.cli as cli
 import ga4gh.protocol as protocol
+import google.protobuf.descriptor as descriptor
+import google.protobuf.internal.python_message as python_message
+import tests.utils as utils
 
 
 class TestServerArguments(unittest.TestCase):
@@ -78,13 +82,21 @@ class TestClientArguments(unittest.TestCase):
     Tests the client cli can parse all arguments it is supposed to
     and can initialize the runner in preparation for a request
     """
+    class ParseFailureException(Exception):
+        pass
+
+    def _raiseParseFailureException(self, exitVal):
+        raise self.ParseFailureException(exitVal)
+
     def setUp(self):
         self.parser = cli.getClientParser()
 
-    # TODO we need a way to test parse failures. This is tricky because
-    # argparse calls sys.exit() on error, which we can't catch directly as
-    # an exception. Using mock to intercept this call would at least
-    # verify that an error has been raised.
+    def testParseFailure(self):
+        cliInput = "invalidCommand"
+        with utils.suppressOutput():
+            with mock.patch('sys.exit', self._raiseParseFailureException):
+                with self.assertRaises(self.ParseFailureException):
+                    self.parser.parse_args(cliInput.split())
 
     def testOutputFormat(self):
         # Most of the commands support the output format option.
@@ -179,6 +191,30 @@ class TestClientArguments(unittest.TestCase):
         self.assertEqual(args.baseUrl, "BASEURL")
         self.assertEquals(args.runner, cli.SearchReadsRunner)
 
+    def testBioSamplesSearchArguments(self):
+        cliInput = (
+            "biosamples-search --pageSize 2 --name BIOSAMPLENAME "
+            "--datasetId DATASETID "
+            "BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.pageSize, 2)
+        self.assertEqual(args.name, "BIOSAMPLENAME")
+        self.assertEqual(args.datasetId, "DATASETID")
+        self.assertEqual(args.baseUrl, "BASEURL")
+        self.assertEquals(args.runner, cli.SearchBioSamplesRunner)
+
+    def testIndividualsSearchArguments(self):
+        cliInput = (
+            "individuals-search --pageSize 2 --name INDIVIDUALNAME "
+            "--datasetId DATASETID "
+            "BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.pageSize, 2)
+        self.assertEqual(args.name, "INDIVIDUALNAME")
+        self.assertEqual(args.datasetId, "DATASETID")
+        self.assertEqual(args.baseUrl, "BASEURL")
+        self.assertEquals(args.runner, cli.SearchIndividualsRunner)
+
     def testDatasetsSearchArguments(self):
         cliInput = "datasets-search BASEURL"
         args = self.parser.parse_args(cliInput.split())
@@ -195,6 +231,14 @@ class TestClientArguments(unittest.TestCase):
     def testReferenceSetGetArguments(self):
         self.verifyGetArguments(
             "referencesets-get", cli.GetReferenceSetRunner)
+
+    def testBioSamplesGetArguments(self):
+        self.verifyGetArguments(
+            "biosamples-get", cli.GetBioSampleRunner)
+
+    def testIndividualsGetArguments(self):
+        self.verifyGetArguments(
+            "individuals-get", cli.GetIndividualRunner)
 
     def testReferenceGetArguments(self):
         self.verifyGetArguments(
@@ -219,6 +263,30 @@ class TestClientArguments(unittest.TestCase):
     def testVariantGetArguments(self):
         self.verifyGetArguments(
             "variants-get", cli.GetVariantRunner)
+
+    def testRnaQuantificationGetArguments(self):
+        self.verifyGetArguments(
+            "rnaquantifications-get", cli.GetRnaQuantificationRunner)
+
+    def testVariantSetsGet(self):
+        self.verifyGetArguments(
+            "variantsets-get", cli.GetVariantSetRunner)
+
+    def testFeaturesGet(self):
+        self.verifyGetArguments(
+            "features-get", cli.GetFeatureRunner)
+
+    def testFeatureSetsGet(self):
+        self.verifyGetArguments(
+            "featuresets-get", cli.GetFeatureSetRunner)
+
+    def testExpressionLevelsGet(self):
+        self.verifyGetArguments(
+            "expressionlevels-get", cli.GetExpressionLevelRunner)
+
+    def testRnaQuantificationSetsGet(self):
+        self.verifyGetArguments(
+            "rnaquantificationsets-get", cli.GetRnaQuantificationSetRunner)
 
     def testReferenceBasesListArguments(self):
         cliInput = (
@@ -271,136 +339,287 @@ class TestClientArguments(unittest.TestCase):
         self.assertEquals(
             args.runner, cli.GetVariantAnnotationSetRunner)
 
+    def testRnaQuantificationSearchArguments(self):
+        cliInput = (
+            "rnaquantifications-search --rnaQuantificationSetId ID BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.rnaQuantificationSetId, "ID")
+        self.assertEqual(args.baseUrl, "BASEURL")
+        self.assertEqual(args.runner, cli.SearchRnaQuantificationsRunner)
+
+    def testExpressionLevelSearchArguments(self):
+        cliInput = (
+            "expressionlevels-search --rnaQuantificationId rID "
+            "--threshold 0.0 BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.rnaQuantificationId, "rID")
+        self.assertEqual(args.threshold, 0.0)
+        self.assertEqual(args.baseUrl, "BASEURL")
+        self.assertEqual(args.runner, cli.SearchExpressionLevelsRunner)
+
+    def testFeaturesSearch(self):
+        cliInput = (
+            "features-search "
+            "--pageSize 3 "
+            "--featureSetId FEATURESETID "
+            "--start 1 "
+            "--end 2 "
+            "--parentId PARENTID "
+            "--featureTypes FEATURE,TYPES "
+            "BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.pageSize, 3)
+        self.assertEqual(args.featureSetId, "FEATURESETID")
+        self.assertEqual(args.start, 1)
+        self.assertEqual(args.end, 2)
+        self.assertEqual(args.parentId, "PARENTID")
+        self.assertEqual(args.featureTypes, "FEATURE,TYPES")
+        self.assertEqual(args.baseUrl, "BASEURL")
+
+    def testFeatureSetsSearch(self):
+        cliInput = (
+            "featuresets-search "
+            "--pageSize 3 "
+            "--datasetId DATASETID "
+            "BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.pageSize, 3)
+        self.assertEqual(args.datasetId, "DATASETID")
+        self.assertEqual(args.baseUrl, "BASEURL")
+
+    def testRnaQuantificationSetsSearch(self):
+        cliInput = (
+            "rnaquantificationsets-search "
+            "--pageSize 3 "
+            "--datasetId DATASETID "
+            "BASEURL")
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEqual(args.pageSize, 3)
+        self.assertEqual(args.datasetId, "DATASETID")
+        self.assertEqual(args.baseUrl, "BASEURL")
+
 
 class TestRepoManagerCli(unittest.TestCase):
 
     def setUp(self):
-        self.parser = cli.getRepoParser()
-        self.repoPath = 'a/repo/path'
+        self.parser = cli.RepoManager.getParser()
+        self.registryPath = 'a/repo/path'
         self.datasetName = "datasetName"
         self.filePath = 'a/file/path'
+        self.individualName = "test"
+        self.bioSampleName = "test"
+        self.individual = protocol.toJson(
+            protocol.Individual(
+                name="test",
+                created="2016-05-19T21:00:19Z",
+                updated="2016-05-19T21:00:19Z"))
+        self.bioSample = protocol.toJson(
+            protocol.BioSample(
+                name="test",
+                created="2016-05-19T21:00:19Z",
+                updated="2016-05-19T21:00:19Z"))
 
     def testInit(self):
-        cliInput = "init {}".format(self.repoPath)
+        cliInput = "init {}".format(self.registryPath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
-        self.assertEquals(args.runner, cli.InitRunner)
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.runner, "init")
 
-    def testCheck(self):
-        cliInput = "check {}".format(self.repoPath)
+    def testVerify(self):
+        cliInput = "verify {}".format(self.registryPath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
-        self.assertEquals(args.runner, cli.CheckRunner)
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.runner, "verify")
 
     def testList(self):
-        cliInput = "list {}".format(self.repoPath)
+        cliInput = "list {}".format(self.registryPath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
-        self.assertEquals(args.runner, cli.ListRunner)
-
-    def testDestroy(self):
-        cliInput = "destroy {} --force".format(self.repoPath)
-        args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
-        self.assertEquals(args.runner, cli.DestroyRunner)
-        self.assertEquals(args.force, True)
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.runner, "list")
 
     def testAddDataset(self):
         cliInput = "add-dataset {} {}".format(
-            self.repoPath, self.datasetName)
+            self.registryPath, self.datasetName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
-        self.assertEquals(args.runner, cli.AddDatasetRunner)
+        self.assertEquals(args.runner, "addDataset")
 
     def testRemoveDataset(self):
         cliInput = "remove-dataset {} {} -f".format(
-            self.repoPath, self.datasetName)
+            self.registryPath, self.datasetName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
-        self.assertEquals(args.runner, cli.RemoveDatasetRunner)
+        self.assertEquals(args.runner, "removeDataset")
         self.assertEquals(args.force, True)
 
     def testAddReferenceSet(self):
         description = "description"
-        cliInput = "add-referenceset {} {} --description={}".format(
-            self.repoPath, self.filePath, description)
+        cliInput = (
+            "add-referenceset {} {} --description={} "
+            "--ncbiTaxonId NCBITAXONID "
+            "--isDerived True "
+            "--assemblyId ASSEMBLYID "
+            "--sourceAccessions SOURCEACCESSIONS "
+            "--sourceUri SOURCEURI ").format(
+            self.registryPath, self.filePath, description)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.filePath, self.filePath)
         self.assertEquals(args.description, description)
-        self.assertEquals(args.runner, cli.AddReferenceSetRunner)
+        self.assertEquals(args.ncbiTaxonId, "NCBITAXONID")
+        self.assertEquals(args.isDerived, True)
+        self.assertEquals(args.assemblyId, "ASSEMBLYID")
+        self.assertEquals(args.sourceAccessions, "SOURCEACCESSIONS")
+        self.assertEquals(args.sourceUri, "SOURCEURI")
+        self.assertEquals(args.runner, "addReferenceSet")
 
     def testRemoveReferenceSet(self):
         referenceSetName = "referenceSetName"
         cliInput = "remove-referenceset {} {} -f".format(
-            self.repoPath, referenceSetName)
+            self.registryPath, referenceSetName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.referenceSetName, referenceSetName)
-        self.assertEquals(args.runner, cli.RemoveReferenceSetRunner)
+        self.assertEquals(args.runner, "removeReferenceSet")
         self.assertEquals(args.force, True)
 
     def testAddReadGroupSet(self):
-        cliInput = "add-readgroupset {} {} {} --moveMode=copy".format(
-            self.repoPath, self.datasetName, self.filePath)
+        cliInput = "add-readgroupset {} {} {} ".format(
+            self.registryPath, self.datasetName, self.filePath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
-        self.assertEquals(args.filePath, self.filePath)
-        self.assertEquals(args.moveMode, "copy")
-        self.assertEquals(args.runner, cli.AddReadGroupSetRunner)
+        self.assertEquals(args.dataFile, self.filePath)
+        self.assertEquals(args.indexFile, None)
+        self.assertEquals(args.runner, "addReadGroupSet")
+
+    def testAddReadGroupSetWithIndexFile(self):
+        indexPath = self.filePath + ".bai"
+        cliInput = "add-readgroupset {} {} {} -I {}".format(
+            self.registryPath, self.datasetName, self.filePath,
+            indexPath)
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.dataFile, self.filePath)
+        self.assertEquals(args.indexFile, indexPath)
+        self.assertEquals(args.runner, "addReadGroupSet")
 
     def testRemoveReadGroupSet(self):
         readGroupSetName = "readGroupSetName"
         cliInput = "remove-readgroupset {} {} {} -f".format(
-            self.repoPath, self.datasetName, readGroupSetName)
+            self.registryPath, self.datasetName, readGroupSetName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
         self.assertEquals(args.readGroupSetName, readGroupSetName)
-        self.assertEquals(args.runner, cli.RemoveReadGroupSetRunner)
+        self.assertEquals(args.runner, "removeReadGroupSet")
         self.assertEquals(args.force, True)
 
     def testAddVariantSet(self):
-        cliInput = "add-variantset {} {} {} --moveMode=move".format(
-            self.repoPath, self.datasetName, self.filePath)
+        cliInput = "add-variantset {} {} {} ".format(
+            self.registryPath, self.datasetName, self.filePath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
-        self.assertEquals(args.filePath, self.filePath)
-        self.assertEquals(args.moveMode, "move")
-        self.assertEquals(args.runner, cli.AddVariantSetRunner)
+        self.assertEquals(args.dataFiles, [self.filePath])
+        self.assertEquals(args.indexFiles, None)
+        self.assertEquals(args.runner, "addVariantSet")
+
+    def testAddVariantSetWithIndexFiles(self):
+        file1 = "file1"
+        file2 = "file2"
+        indexFile1 = file1 + ".tbi"
+        indexFile2 = file2 + ".tbi"
+        cliInput = "add-variantset {} {} {} {} -I {} {}".format(
+            self.registryPath, self.datasetName, file1, file2,
+            indexFile1, indexFile2)
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.dataFiles, [file1, file2])
+        self.assertEquals(args.indexFiles, [indexFile1, indexFile2])
+        self.assertEquals(args.runner, "addVariantSet")
 
     def testRemoveVariantSet(self):
         variantSetName = "variantSetName"
         cliInput = "remove-variantset {} {} {}".format(
-            self.repoPath, self.datasetName, variantSetName)
+            self.registryPath, self.datasetName, variantSetName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.datasetName, self.datasetName)
         self.assertEquals(args.variantSetName, variantSetName)
-        self.assertEquals(args.runner, cli.RemoveVariantSetRunner)
+        self.assertEquals(args.runner, "removeVariantSet")
         self.assertEquals(args.force, False)
 
-    def testAddOntologyMap(self):
-        cliInput = "add-ontologymap {} {} --moveMode=move".format(
-            self.repoPath, self.filePath)
+    def testAddOntology(self):
+        cliInput = "add-ontology {} {}".format(
+            self.registryPath, self.filePath)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
+        self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.filePath, self.filePath)
-        self.assertEquals(args.moveMode, "move")
-        self.assertEquals(args.runner, cli.AddOntologyMapRunner)
+        self.assertEquals(args.runner, "addOntology")
 
-    def testRemoveOntologyMap(self):
-        ontologyMapName = "ontologyMap"
-        cliInput = "remove-ontologymap {} {}".format(
-            self.repoPath, ontologyMapName)
+    def testRemoveOntology(self):
+        ontologyName = "the_ontology_name"
+        cliInput = "remove-ontology {} {}".format(
+            self.registryPath, ontologyName)
         args = self.parser.parse_args(cliInput.split())
-        self.assertEquals(args.repoPath, self.repoPath)
-        self.assertEquals(args.ontologyMapName, ontologyMapName)
-        self.assertEquals(args.runner, cli.RemoveOntologyMapRunner)
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.ontologyName, ontologyName)
+        self.assertEquals(args.runner, "removeOntology")
+        self.assertEquals(args.force, False)
+
+    def testAddBioSample(self):
+        cliInput = "add-biosample {} {} {} '{}'".format(
+            self.registryPath,
+            self.datasetName,
+            self.bioSampleName,
+            self.bioSample)
+        args = self.parser.parse_args(shlex.split(cliInput))
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.bioSampleName, self.bioSampleName)
+        self.assertEquals(args.bioSample, self.bioSample)
+        self.assertEquals(args.runner, "addBioSample")
+
+    def testRemoveBioSample(self):
+        cliInput = "remove-biosample {} {} {}".format(
+            self.registryPath,
+            self.datasetName,
+            self.bioSampleName)
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.bioSampleName, self.bioSampleName)
+        self.assertEquals(args.runner, "removeBioSample")
+        self.assertEquals(args.force, False)
+
+    def testAddIndividual(self):
+        cliInput = "add-individual {} {} {} '{}'".format(
+            self.registryPath,
+            self.datasetName,
+            self.individualName,
+            self.individual)
+        args = self.parser.parse_args(shlex.split(cliInput))
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.individualName, self.individualName)
+        self.assertEquals(args.individual, self.individual)
+        self.assertEquals(args.runner, "addIndividual")
+
+    def testRemoveIndividual(self):
+        cliInput = "remove-individual {} {} {}".format(
+            self.registryPath,
+            self.datasetName,
+            self.individualName)
+        args = self.parser.parse_args(cliInput.split())
+        self.assertEquals(args.registryPath, self.registryPath)
+        self.assertEquals(args.datasetName, self.datasetName)
+        self.assertEquals(args.individualName, self.individualName)
+        self.assertEquals(args.runner, "removeIndividual")
         self.assertEquals(args.force, False)
 
 
@@ -416,13 +635,54 @@ class TestOutputFormats(unittest.TestCase):
             self.baseUrl = 'baseUrl'
             self.verbose = 'verbose'
 
-    class FakeObject(protocol.ProtocolElement):
+    class FakeObject(protocol.message.Message):
+        __metaclass__ = python_message.GeneratedProtocolMessageType
 
-        __slots__ = ['id', 'name']
+        FILE = descriptor.FileDescriptor(__file__, "test", "")
+        DESCRIPTOR = descriptor.Descriptor(
+            "FakeObject",
+            "test.FakeObject",
+            filename=__file__,
+            file=FILE,
+            containing_type=None,
+            fields=[
+                descriptor.FieldDescriptor(
+                    name="name",
+                    full_name="test.FakeObject.name",
+                    index=0,
+                    number=1,
+                    type=descriptor.FieldDescriptor.TYPE_STRING,
+                    cpp_type=descriptor.FieldDescriptor.CPPTYPE_STRING,
+                    label=descriptor.FieldDescriptor.LABEL_REQUIRED,
+                    default_value="",
+                    message_type=None,
+                    enum_type=None,
+                    containing_type=None,
+                    is_extension=False,
+                    extension_scope=None
+                ),
+                descriptor.FieldDescriptor(
+                    name="id",
+                    full_name="test.FakeObject.id",
+                    index=1,
+                    number=2,
+                    type=descriptor.FieldDescriptor.TYPE_STRING,
+                    cpp_type=descriptor.FieldDescriptor.CPPTYPE_STRING,
+                    label=descriptor.FieldDescriptor.LABEL_REQUIRED,
+                    default_value="",
+                    message_type=None,
+                    enum_type=None,
+                    containing_type=None,
+                    is_extension=False,
+                    extension_scope=None
+                )
+            ], nested_types=[], enum_types=[], extensions=[])
 
-        def __init__(self):
-            self.id = 'id'
-            self.name = 'name'
+    def makeFakeObject(self):
+        returnObj = self.FakeObject()
+        returnObj.id = 'id'
+        returnObj.name = 'name'
+        return returnObj
 
     def _getRunPrintMethodCalls(self, runner):
         printCalls = []
@@ -438,7 +698,7 @@ class TestOutputFormats(unittest.TestCase):
         args.end = 100
         returnVal = 'AGCT' * 100  # 400 bases
         runner = cli.ListReferenceBasesRunner(args)
-        runner._client.listReferenceBases = mock.Mock(
+        runner._client.list_reference_bases = mock.Mock(
             return_value=returnVal)
         printCalls = self._getRunPrintMethodCalls(runner)
         self.assertEqual(printCalls[0][0][0], '>id:1-100')
@@ -448,7 +708,7 @@ class TestOutputFormats(unittest.TestCase):
             returnVal[-50:])  # 50 = 400 % 70
 
     def testTextOutput(self):
-        returnObj = self.FakeObject()
+        returnObj = self.makeFakeObject()
         args = self.FakeArgs()
         runner = cli.AbstractGetRunner(args)
         runner._method = mock.Mock(return_value=returnObj)
@@ -456,7 +716,7 @@ class TestOutputFormats(unittest.TestCase):
         self.assertEqual(printCalls, [((u'id', u'name'), {'sep': u'\t'})])
 
     def testJsonOutput(self):
-        returnObj = self.FakeObject()
+        returnObj = self.makeFakeObject()
         args = self.FakeArgs('json')
         runner = cli.AbstractGetRunner(args)
         runner._method = mock.Mock(return_value=returnObj)

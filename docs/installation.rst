@@ -62,8 +62,8 @@ Download and unpack the example data:
 
 .. code-block:: bash
 
-  $ wget https://github.com/ga4gh/server/releases/download/data/ga4gh-example-data-v3.2.tar
-  $ tar -xf ga4gh-example-data-v3.2.tar
+  $ wget https://github.com/ga4gh/server/releases/download/data/ga4gh-example-data-v4.3.tar
+  $ tar -xf ga4gh-example-data-v4.3.tar
 
 Create the WSGI file at ``/srv/ga4gh/application.wsgi`` and write the following
 contents:
@@ -79,18 +79,20 @@ following contents:
 
 .. code-block:: python
 
-    DATA_SOURCE = "/srv/ga4gh/ga4gh-example-data"
+    DATA_SOURCE = "/srv/ga4gh/ga4gh-example-data/repo.db"
 
 (Many more configuration options are available --- see the :ref:`configuration`
 section for a detailed discussion on the server configuration and input data.)
 
-Configure Apache. Edit the file ``/etc/apache2/sites-available/000-default.conf``
+Configure Apache. Note that these instructions are for Apache 2.4 or greater.
+Edit the file ``/etc/apache2/sites-available/000-default.conf``
 and insert the following contents towards the end of the file
 (*within* the ``<VirtualHost:80>...</VirtualHost>`` block):
 
 .. code-block:: apacheconf
 
     WSGIDaemonProcess ga4gh \
+        processes=10 threads=1 \
         python-path=/srv/ga4gh/ga4gh-server-env/lib/python2.7/site-packages \
         python-eggs=/var/cache/apache2/python-egg-cache
     WSGIScriptAlias /ga4gh /srv/ga4gh/application.wsgi
@@ -101,14 +103,42 @@ and insert the following contents towards the end of the file
         Require all granted
     </Directory>
 
-Restart Apache:
+.. warning::
+
+    Be sure to keep the number of threads limited to 1 in the WSGIDaemonProcess
+    setting. Performance tuning should be done using the processes setting.
+
+The instructions for configuring Apache 2.2 (on Ubuntu 14.04) are the same as
+above with thee following exceptions:
+
+You need to edit
+``/etc/apache2/sites-enabled/000-default``
+
+instead of
+``/etc/apache2/sites-enabled/000-default.conf``
+
+And while in that file, you need to set permissions for the directory to
+
+.. code-block:: apacheconf
+
+    Allow from all
+
+instead of
+
+.. code-block:: apacheconf
+
+    Require all granted
+
+
+
+Now restart Apache:
 
 .. code-block:: bash
 
   $ sudo service apache2 restart
 
 We will now test to see the server started properly by requesting the
-landing page. 
+landing page.
 
 .. code-block:: bash
 
@@ -117,7 +147,7 @@ landing page.
     #    <h2>GA4GH reference server 0.2.3.dev4+nge0b07f3</h2>
     # Welcome to the GA4GH reference server landing page! This page describes
 
-We can also test the server by running some API commands. Please refer to 
+We can also test the server by running some API commands. Please refer to
 the instructions in the :ref:`demo` for how to access data made available
 by this server.
 
@@ -139,16 +169,12 @@ how to deploy on various other servers.
 Troubleshooting
 +++++++++++++++
 
-If you are encountering difficulties getting the above to work, it is helpful
-to turn on debugging output. Do this by adding the following line to your
-config file:
+Server errors will be output to the web server's error log by default (in Apache on
+Debian/Ubuntu, for example, this is ``/var/log/apache2/error.log``). Each client
+request will be logged to the web server's access log (in Apache on Debian/Ubuntu
+this is ``/var/log/apache2/access.log``).
 
-.. code-block:: python
-
-    DEBUG = True
-
-When an error occurs, the details of this will then be printed to the web server's
-error log (in Apache on Debian/Ubuntu, for example, this is ``/var/log/apache2/error.log``).
+For more server configuration options see :ref:`Configuration`
 
 --------------------
 Deployment on Docker
@@ -197,7 +223,7 @@ From the client, the server is accessible at ``http://server/``, and the ``/tmp/
 
   #make a development dir and place the example client script in it
   $ mkdir /tmp/mydev
-  $ curl https://raw.githubusercontent.com/ga4gh/server/develop/scripts/demo_example.py > /tmp/mydev/demo_example.py
+  $ curl https://raw.githubusercontent.com/ga4gh/server/master/scripts/demo_example.py > /tmp/mydev/demo_example.py
   $ chmod +x /tmp/mydev/demo_example.py
 
   # start the server daemon
@@ -298,3 +324,66 @@ To enable DEBUG on your docker server, call docker run with ``-e GA4GH_DEBUG=Tru
 This will set the environment variable which is read by config.py
 
 You can then get logs from the docker container by running ``docker logs (container)`` e.g. ``docker logs ga4gh_demo``
+
+----------------------------------------------
+Installing the development version on Mac OS X
+----------------------------------------------
+
+**Prerequisites**
+
+First install libraries and header code for
+`Python 2.7 <https://www.python.org/download/releases/2.7/>`_.
+It will be a lot easier if you have `Homebrew <http://brew.sh/index.html>`_,
+the "missing package manager" for OS X, installed first.
+To install Homebrew, paste the following at a Terminal prompt ($):
+
+.. code-block:: bash
+
+  $ /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+
+Now use ``brew install`` to install Python if you don't have Python 2.7
+installed and then ``pip install``, which comes with Python, can be used to
+install virtual environment:
+
+.. code-block:: bash
+
+  $ brew install python
+  $ pip install virtualenv
+
+**Install**
+
+Download source code from GitHub to the project target folder, here assumed to 
+be ``~/ga4gh``: (If you haven't already done so, 
+`set up github <https://help.github.com/articles/set-up-git/>`_ 
+to work from your command line.)
+
+.. code-block:: bash
+
+  $ git clone https://github.com/ga4gh/server.git
+
+Before installing Python library dependencies, create a virtualenv sandbox to 
+isolate it from the rest of the system, and then activate it:
+
+.. code-block:: bash
+
+  $ cd server
+  $ virtualenv ga4gh-env
+  $ source ga4gh-env/bin/activate
+
+Install Python dependencies:
+
+.. code-block:: bash
+
+  (ga4gh-env) $ pip install -r dev-requirements.txt
+
+**Test and run**
+
+Run tests to verify the install:
+
+.. code-block:: bash
+
+  (ga4gh-env) $ python scripts/run_tests.py
+
+Please refer to the instructions in the :ref:`demo` for how to access
+data made available by this server.
+

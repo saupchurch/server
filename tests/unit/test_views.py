@@ -1,12 +1,15 @@
 """
 Unit tests for the frontend code.
 """
+# TODO the sendGetX methods, etc. could use some refactoring
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
 import unittest
 import logging
+
+import tests.paths as paths
 
 import ga4gh.datamodel as datamodel
 import ga4gh.frontend as frontend
@@ -27,6 +30,7 @@ class TestFrontend(unittest.TestCase):
             "SIMULATED_BACKEND_NUM_CALLS": 1,
             "SIMULATED_BACKEND_VARIANT_DENSITY": 1.0,
             "SIMULATED_BACKEND_NUM_VARIANT_SETS": 1,
+            "LANDING_MESSAGE_HTML": paths.landingMessageHtml
             # "DEBUG" : True
         }
         frontend.reset()
@@ -57,6 +61,14 @@ class TestFrontend(unittest.TestCase):
         cls.readGroupId = cls.readGroup.getId()
         cls.readAlignment = cls.readGroup.getReadAlignments().next()
         cls.readAlignmentId = cls.readAlignment.id
+        cls.rnaQuantificationSet = cls.dataset.getRnaQuantificationSets()[0]
+        cls.rnaQuantificationSetId = cls.rnaQuantificationSet.getId()
+        cls.rnaQuantification = cls.rnaQuantificationSet.getRnaQuantifications(
+            )[0]
+        cls.rnaQuantificationId = cls.rnaQuantification.getId()
+        cls.expressionLevel = cls.rnaQuantification.getExpressionLevels(
+            1, 2)[0]
+        cls.expressionLevelId = cls.expressionLevel.getId()
 
     def sendPostRequest(self, path, request):
         """
@@ -67,7 +79,7 @@ class TestFrontend(unittest.TestCase):
             'Origin': self.exampleUrl,
         }
         return self.app.post(
-            path, headers=headers, data=request.toJsonString())
+            path, headers=headers, data=protocol.toJson(request))
 
     def sendGetRequest(self, path):
         """
@@ -80,37 +92,52 @@ class TestFrontend(unittest.TestCase):
 
     def sendVariantsSearch(self):
         response = self.sendVariantSetsSearch()
-        variantSets = protocol.SearchVariantSetsResponse().fromJsonString(
-            response.data).variantSets
+        variantSets = protocol.fromJson(
+            response.data, protocol.SearchVariantSetsResponse).variant_sets
         request = protocol.SearchVariantsRequest()
-        request.variantSetId = variantSets[0].id
-        request.referenceName = "1"
+        request.variant_set_id = variantSets[0].id
+        request.reference_name = "1"
         request.start = 0
         request.end = 1
         return self.sendPostRequest('/variants/search', request)
 
     def sendVariantSetsSearch(self):
         request = protocol.SearchVariantSetsRequest()
-        request.datasetId = self.datasetId
+        request.dataset_id = self.datasetId
         return self.sendPostRequest('/variantsets/search', request)
 
     def sendCallSetsSearch(self):
         response = self.sendVariantSetsSearch()
-        variantSets = protocol.SearchVariantSetsResponse().fromJsonString(
-            response.data).variantSets
+        variantSets = protocol.fromJson(
+            response.data, protocol.SearchVariantSetsResponse).variant_sets
         request = protocol.SearchCallSetsRequest()
-        request.variantSetId = variantSets[0].id
+        request.variant_set_id = variantSets[0].id
         return self.sendPostRequest('/callsets/search', request)
 
-    def sendReadsSearch(self, readGroupIds=None, referenceId=None):
+    def sendReadsSearch(self, readGroupIds=None, referenceId=""):
         request = protocol.SearchReadsRequest()
-        request.readGroupIds = readGroupIds
-        request.referenceId = referenceId
+        request.read_group_ids.extend(readGroupIds)
+        request.reference_id = referenceId
         return self.sendPostRequest('/reads/search', request)
 
     def sendDatasetsSearch(self):
         request = protocol.SearchDatasetsRequest()
         return self.sendPostRequest('/datasets/search', request)
+
+    def sendRnaQuantificationSetsSearch(self):
+        request = protocol.SearchRnaQuantificationSetsRequest()
+        request.dataset_id = self.datasetId
+        return self.sendPostRequest('/rnaquantificationsets/search', request)
+
+    def sendRnaQuantificationsSearch(self):
+        request = protocol.SearchRnaQuantificationsRequest()
+        request.rna_quantification_set_id = self.rnaQuantificationSetId
+        return self.sendPostRequest('/rnaquantifications/search', request)
+
+    def sendExpressionLevelsSearch(self):
+        request = protocol.SearchExpressionLevelsRequest()
+        request.rna_quantification_id = self.rnaQuantificationId
+        return self.sendPostRequest('/expressionlevels/search', request)
 
     def sendReferencesSearch(self):
         path = "/references/search"
@@ -174,11 +201,32 @@ class TestFrontend(unittest.TestCase):
         response = self.sendGetRequest(path)
         return response
 
+    def sendGetRnaQuantificationSet(self, id_=None):
+        if id_ is None:
+            id_ = self.rnaQuantificationSetId
+        path = "/rnaquantificationsets/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetRnaQuantification(self, id_=None):
+        if id_ is None:
+            id_ = self.rnaQuantificationId
+        path = "/rnaquantifications/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
+    def sendGetExpressionLevel(self, id_=None):
+        if id_ is None:
+            id_ = self.expressionLevelId
+        path = "/expressionlevels/{}".format(id_)
+        response = self.sendGetRequest(path)
+        return response
+
     def sendListRequest(self, path, request):
         headers = {
             'Origin': self.exampleUrl,
         }
-        data = request.toJsonDict()
+        data = protocol.toJsonDict(request)
         response = self.app.get(path, data=data, headers=headers)
         return response
 
@@ -198,7 +246,8 @@ class TestFrontend(unittest.TestCase):
         ]
         for path in paths:
             response = self.app.get(path)
-            protocol.GAException.fromJsonString(response.get_data())
+            protocol.fromJson(
+                response.get_data(), protocol.GAException)
             self.assertEqual(404, response.status_code)
 
     def testCors(self):
@@ -230,11 +279,13 @@ class TestFrontend(unittest.TestCase):
         returns the correct status code.
         """
         response = self.app.post(path)
-        protocol.GAException.fromJsonString(response.get_data())
+        protocol.fromJson(
+            response.get_data(), protocol.GAException)
         self.assertEqual(415, response.status_code)
         if not getDefined:
             getResponse = self.app.get(path)
-            protocol.GAException.fromJsonString(getResponse.get_data())
+            protocol.fromJson(
+                getResponse.get_data(), protocol.GAException)
             self.assertEqual(405, getResponse.status_code)
 
         # Malformed requests should return 400
@@ -286,22 +337,22 @@ class TestFrontend(unittest.TestCase):
     def testVariantsSearch(self):
         response = self.sendVariantsSearch()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.SearchVariantsResponse.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchVariantsResponse)
         self.assertEqual(len(responseData.variants), 1)
 
     def testVariantSetsSearch(self):
         response = self.sendVariantSetsSearch()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.SearchVariantSetsResponse.fromJsonString(
-            response.data)
-        self.assertEqual(len(responseData.variantSets), 1)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchVariantSetsResponse)
+        self.assertEqual(len(responseData.variant_sets), 1)
 
     def testGetDataset(self):
         # Test OK: ID found
         response = self.sendDatasetsSearch()
-        responseData = protocol.SearchDatasetsResponse.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchDatasetsResponse)
         datasetId = responseData.datasets[0].id
         response = self.sendGetDataset(datasetId)
         self.assertEqual(200, response.status_code)
@@ -315,9 +366,9 @@ class TestFrontend(unittest.TestCase):
 
     def testGetVariantSet(self):
         response = self.sendVariantSetsSearch()
-        responseData = protocol.SearchVariantSetsResponse.fromJsonString(
-            response.data)
-        variantSetId = responseData.variantSets[0].id
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchVariantSetsResponse)
+        variantSetId = responseData.variant_sets[0].id
         response = self.sendGetVariantSet(variantSetId)
         self.assertEqual(200, response.status_code)
         invalidId = datamodel.VariantSetCompoundId.getInvalidIdString()
@@ -329,24 +380,21 @@ class TestFrontend(unittest.TestCase):
     def testGetReadGroupSet(self):
         response = self.sendGetReadGroupSet()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.ReadGroupSet.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(response.data, protocol.ReadGroupSet)
         self.assertEqual(
             responseData.id, self.readGroupSetId)
 
     def testGetReadGroup(self):
         response = self.sendGetReadGroup()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.ReadGroup.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(response.data, protocol.ReadGroup)
         self.assertEqual(
             responseData.id, self.readGroupId)
 
     def testGetCallSet(self):
         response = self.sendGetCallSet()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.CallSet.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(response.data, protocol.CallSet)
         self.assertEqual(
             responseData.id, self.callSetId)
 
@@ -357,16 +405,16 @@ class TestFrontend(unittest.TestCase):
     def testCallSetsSearch(self):
         response = self.sendCallSetsSearch()
         self.assertEqual(200, response.status_code)
-        responseData = protocol.SearchCallSetsResponse.fromJsonString(
-            response.data)
-        self.assertEqual(len(responseData.callSets), 1)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchCallSetsResponse)
+        self.assertEqual(len(responseData.call_sets), 1)
 
     def testReadsSearch(self):
         response = self.sendReadsSearch(readGroupIds=[self.readGroupId],
                                         referenceId=self.referenceId)
         self.assertEqual(200, response.status_code)
-        responseData = protocol.SearchReadsResponse.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchReadsResponse)
         self.assertEqual(len(responseData.alignments), 2)
         self.assertEqual(
             responseData.alignments[0].id,
@@ -374,8 +422,8 @@ class TestFrontend(unittest.TestCase):
 
     def testDatasetsSearch(self):
         response = self.sendDatasetsSearch()
-        responseData = protocol.SearchDatasetsResponse.fromJsonString(
-            response.data)
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchDatasetsResponse)
         datasets = list(responseData.datasets)
         self.assertEqual(self.datasetId, datasets[0].id)
 
@@ -385,7 +433,7 @@ class TestFrontend(unittest.TestCase):
 
     def testSearchUnmappedReads(self):
         response = self.sendReadsSearch(readGroupIds=[self.readGroupId],
-                                        referenceId=None)
+                                        referenceId="")
         self.assertEqual(501, response.status_code)
 
     def testSearchReadsMultipleReadGroupSetsSetMismatch(self):
@@ -393,3 +441,46 @@ class TestFrontend(unittest.TestCase):
             readGroupIds=[self.readGroupId, "42"],
             referenceId=self.referenceId)
         self.assertEqual(400, response.status_code)
+
+    def testGetExpressionLevel(self):
+        response = self.sendGetExpressionLevel()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.fromJson(
+            response.data, protocol.ExpressionLevel)
+        self.assertEqual(responseData.id, self.expressionLevelId)
+
+    def testGetRnaQuantification(self):
+        response = self.sendGetRnaQuantification()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.fromJson(
+            response.data, protocol.RnaQuantification)
+        self.assertEqual(responseData.id, self.rnaQuantificationId)
+
+    def testGetRnaQuantificationSet(self):
+        response = self.sendGetRnaQuantificationSet()
+        self.assertEqual(200, response.status_code)
+        responseData = protocol.fromJson(
+            response.data, protocol.RnaQuantificationSet)
+        self.assertEqual(responseData.id, self.rnaQuantificationSetId)
+
+    def testExpressionLevelsSearch(self):
+        response = self.sendExpressionLevelsSearch()
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchExpressionLevelsResponse)
+        expressionLevels = list(responseData.expression_levels)
+        self.assertEqual(self.expressionLevelId, expressionLevels[0].id)
+
+    def testRnaQuantificationsSearch(self):
+        response = self.sendRnaQuantificationsSearch()
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchRnaQuantificationsResponse)
+        rnaQuantifications = list(responseData.rna_quantifications)
+        self.assertEqual(self.rnaQuantificationId, rnaQuantifications[0].id)
+
+    def testRnaQuantificationSetsSearch(self):
+        response = self.sendRnaQuantificationSetsSearch()
+        responseData = protocol.fromJson(
+            response.data, protocol.SearchRnaQuantificationSetsResponse)
+        rnaQuantificationSets = list(responseData.rna_quantification_sets)
+        self.assertEqual(
+            self.rnaQuantificationSetId, rnaQuantificationSets[0].id)

@@ -13,9 +13,11 @@ import vcf
 import ga4gh.datamodel as datamodel
 import ga4gh.datamodel.datasets as datasets
 import ga4gh.datamodel.variants as variants
-import ga4gh.datarepo as datarepo
+import ga4gh.datamodel.references as references
+import ga4gh.datamodel.ontologies as ontologies
 import ga4gh.protocol as protocol
 import tests.datadriven as datadriven
+import tests.paths as paths
 
 
 def testVariantAnnotationSets():
@@ -32,15 +34,11 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
     variants.VariantAnnotationSet object.
     """
     def __init__(self, variantAnnotationSetId, baseDir):
-        self._dataset = datasets.AbstractDataset("ds")
-        self._datarepo = datarepo.FileSystemDataRepository("tests/data")
         super(VariantAnnotationSetTest, self).__init__(
             variantAnnotationSetId, baseDir)
-        self._variantSet = variants.HtslibVariantSet(
-            self._dataset, "vs", self._dataPath, None)
         self._variantRecords = []
         self._referenceNames = set()
-        # Only read in VCF files with a JSON sidecar saying they're annotated.
+        # Only read in VCF files that are annotated.
         for vcfFile in glob.glob(os.path.join(self._dataPath, "*.vcf.gz")):
             if self._isAnnotated():
                 self._readVcf(vcfFile)
@@ -48,8 +46,8 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
 
     def _isAnnotated(self):
         """
-        Determines whether the variant set under test is annotated
-        by looking for a JSON sidecar.
+        Determines whether the variant set under test is annotated.
+
         :return: Boolean
         """
         pyvcfreader = vcf.Reader(
@@ -113,16 +111,19 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
         return dict(zip(fields, values))
 
     def getDataModelInstance(self, localId, dataPath):
-        # Return a VA set if it is one
-        if self._isAnnotated():
-            self._variantSet = variants.HtslibVariantSet(
-                self._dataset, "vs", self._dataPath, None)
-            return variants.HtslibVariantAnnotationSet(
-                self._dataset, localId, dataPath,
-                self._datarepo, self._variantSet)
+        dataset = datasets.Dataset("ds")
+        variantSet = variants.HtslibVariantSet(dataset, localId)
+        variantSet.populateFromDirectory(dataPath)
+        referenceSet = references.AbstractReferenceSet("rs")
+        variantSet.setReferenceSet(referenceSet)
+        if variantSet.isAnnotated():
+            sequenceOntology = ontologies.Ontology(paths.ontologyName)
+            sequenceOntology.populateFromFile(paths.ontologyPath)
+            annotationSet = variantSet.getVariantAnnotationSets()[0]
+            annotationSet.setOntology(sequenceOntology)
+            return annotationSet
         else:
-            return variants.HtslibVariantSet(
-                self._dataset, localId, dataPath, None)
+            return variantSet
 
     def getProtocolClass(self):
         if self._isAnnotated():
@@ -140,36 +141,36 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
         Verifies that the lists of GA4GH variants and pyvcf variants
         are equivalent.
         """
-
         self.assertEqual(len(gaVariantAnnotations), len(pyvcfVariants))
-        for gaVariantAnnotation, pyvcfVariant in zip(
-                gaVariantAnnotations, pyvcfVariants):
+        for pair, pyvcfVariant in zip(gaVariantAnnotations, pyvcfVariants):
+            gaVariant, gaVariantAnnotation = pair
             # TODO parse and compare with analysis.info
             # pyvcfInfo = pyvcfVariant.INFO
             # pyvcf uses 1-based indexing.
-            self.assertEqual(gaVariantAnnotation.start, pyvcfVariant.POS - 1)
-            self.assertEqual(gaVariantAnnotation.end, pyvcfVariant.end)
+            self.assertEqual(gaVariant.id, gaVariantAnnotation.variant_id)
+            self.assertEqual(gaVariant.start, pyvcfVariant.POS - 1)
+            self.assertEqual(gaVariant.end, pyvcfVariant.end)
             # Annotated VCFs contain an ANN field in the record info
             if 'ANN' in pyvcfVariant.INFO:
                 pyvcfAnn = pyvcfVariant.INFO['ANN']
                 i = 0
                 for pyvcfEffect, gaEffect in \
-                        zip(pyvcfAnn, gaVariantAnnotation.transcriptEffects):
+                        zip(pyvcfAnn, gaVariantAnnotation.transcript_effects):
                     effectDict = self.splitAnnField(pyvcfEffect)
                     self.assertEqual(
-                        gaEffect.alternateBases, effectDict['alt'])
+                        gaEffect.alternate_bases, effectDict['alt'])
                     self.assertEqual(
-                        gaEffect.featureId, effectDict['featureId'])
+                        gaEffect.feature_id, effectDict['featureId'])
                     self.assertEqual(
-                        gaEffect.hgvsAnnotation.transcript,
+                        gaEffect.hgvs_annotation.transcript,
                         effectDict['hgvsC'])
                     self.assertEqual(
-                        gaEffect.hgvsAnnotation.protein, effectDict['hgvsP'])
+                        gaEffect.hgvs_annotation.protein, effectDict['hgvsP'])
                     if 'HGVS.g' in pyvcfVariant.INFO:
                         # Not all VCF have this field
                         index = i % len(pyvcfVariant.INFO['HGVS.g'])
                         self.assertEqual(
-                            gaEffect.hgvsAnnotation.genomic,
+                            gaEffect.hgvs_annotation.genomic,
                             pyvcfVariant.INFO['HGVS.g'][index])
                     i += 1
             elif 'CSQ' in pyvcfVariant.INFO:
@@ -179,10 +180,10 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
                     transcriptEffects += self._splitCsqEffects(ann)
                 for treff, gaEffect in zip(
                         transcriptEffects,
-                        gaVariantAnnotation.transcriptEffects):
-                    self.assertEqual(gaEffect.alternateBases, treff['alt'])
-                    self.assertEqual(gaEffect.featureId, treff['featureId'])
-            self.assertIsNotNone(gaVariantAnnotation.transcriptEffects)
+                        gaVariantAnnotation.transcript_effects):
+                    self.assertEqual(gaEffect.alternate_bases, treff['alt'])
+                    self.assertEqual(gaEffect.feature_id, treff['featureId'])
+            self.assertGreater(len(gaVariantAnnotation.transcript_effects), 0)
 
     def _splitCsqEffects(self, annStr):
         (alt, gene, featureId, featureType, effects, cdnaPos,
@@ -204,9 +205,9 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
         for referenceName in self._referenceNames:
             iterator = self._gaObject.getVariantAnnotations(
                 referenceName, 0, end)
-            for gaVariantAnnotation in iterator:
+            for gaVariant, gaVariantAnnotation in iterator:
                 self.assertValid(protocol.VariantAnnotation,
-                                 gaVariantAnnotation.toJsonDict())
+                                 protocol.toJson(gaVariantAnnotation))
 
     def _getPyvcfVariants(
             self, referenceName, startPosition=0, endPosition=2**30):
@@ -233,8 +234,9 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
 
     def _assertVariantsEqualInRange(
             self, referenceName, startPosition, endPosition):
-        gaVariantAnnotations = list(self._gaObject.getVariantAnnotations(
-            referenceName, startPosition, endPosition))
+        gaVariantAnnotations = list(
+            self._gaObject.getVariantAnnotations(
+                referenceName, startPosition, endPosition))
         pyvcfVariants = self._getPyvcfVariants(
             referenceName, startPosition, endPosition)
         self.assertGreaterEqual(len(gaVariantAnnotations), 0)
@@ -257,7 +259,7 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
             self._assertVariantsEqualInRange(referenceName, seg2, maxi)
 
     def _gaVariantAnnotationEqualsPyvcfVariantAnnotation(
-            self, gaVariant, pyvcfVariant):
+            self, gaVariant, gaAnnotation, pyvcfVariant):
         if gaVariant.start != pyvcfVariant.start:
             return False
         if gaVariant.end != pyvcfVariant.end:
@@ -267,11 +269,11 @@ class VariantAnnotationSetTest(datadriven.DataDrivenTest):
     def _pyvcfVariantAnnotationIsInGaVariantAnnotations(
             self, pyvcfVariant, intervalStart, intervalEnd):
         isIn = False
-        gaVariants = list(self._gaObject.getVariantAnnotations(
+        pairs = list(self._gaObject.getVariantAnnotations(
             pyvcfVariant.CHROM, intervalStart, intervalEnd))
-        for gaVariant in gaVariants:
+        for gaVariant, gaAnnotation in pairs:
             if self._gaVariantAnnotationEqualsPyvcfVariantAnnotation(
-                    gaVariant, pyvcfVariant):
+                    gaVariant, gaAnnotation, pyvcfVariant):
                 isIn = True
                 break
         return isIn

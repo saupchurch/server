@@ -8,9 +8,11 @@ from __future__ import unicode_literals
 import ga4gh.datarepo as datarepo
 import ga4gh.datamodel as datamodel
 import ga4gh.datamodel.datasets as datasets
+import ga4gh.datamodel.references as references
 import ga4gh.datamodel.sequenceAnnotations as sequenceAnnotations
 import ga4gh.protocol as protocol
 import tests.datadriven as datadriven
+import tests.paths as paths
 
 _datasetName = "ds"
 
@@ -22,7 +24,7 @@ _discontinuousTestData = {
     "sampleParentId": 4409956112,
     "sampleStart": 820942,
     "sampleEnd": 821379,
-    "sampleStrand": protocol.Strand.POS_STRAND,
+    "sampleStrand": protocol.POS_STRAND,
     "sampleSiblings": 2,
     "region": [0, 2**32],
     "ontologyRestriction": ["gene", ],
@@ -37,7 +39,7 @@ _gencodeV21Set1TestData = {
     "sampleParentId": 4397111312,
     "sampleStart": 804776,
     "sampleEnd": 804832,
-    "sampleStrand": protocol.Strand.POS_STRAND,
+    "sampleStrand": protocol.POS_STRAND,
     "sampleSiblings": 5,
     "region": [0, 2**32],
     "ontologyRestriction": ["gene", ],
@@ -52,8 +54,8 @@ _sacCerTestTestData = {
     "sampleParentId": None,
     "sampleStart": 337,
     "sampleEnd": 801,
-    "sampleStrand": protocol.Strand.NEG_STRAND,
-    "sampleSiblings": 20,
+    "sampleStrand": protocol.NEG_STRAND,
+    "sampleSiblings": 33,
     "region": [0, 2**32],
     "ontologyRestriction": ["gene", ],
     "featuresWithOntology": 11
@@ -67,8 +69,8 @@ _specialCasesTestTestData = {
     "sampleParentId": None,
     "sampleStart": 22229583,
     "sampleEnd": 22229699,
-    "sampleStrand": protocol.Strand.NEG_STRAND,
-    "sampleSiblings": 2,
+    "sampleStrand": protocol.NEG_STRAND,
+    "sampleSiblings": 4,
     "region": [0, 2**32],
     "ontologyRestriction": ["gene", ],
     "featuresWithOntology": 0
@@ -107,8 +109,11 @@ class FeatureSetTests(datadriven.DataDrivenTest):
         :param dataPath: string representing full path to the .db file
         :return:
         """
-        self._dataset = datasets.AbstractDataset(_datasetName)
-        self._datarepo = datarepo.FileSystemDataRepository("tests/data")
+        self._dataset = datasets.Dataset(_datasetName)
+        self._repo = datarepo.SqlDataRepository(paths.testDataRepo)
+        self._repo.open(datarepo.MODE_READ)
+        self._ontology = self._repo.getOntologyByName(paths.ontologyName)
+        self._referenceSet = references.AbstractReferenceSet("test_rs")
         featureSetLocalName = featureSetLocalName[:-3]  # remove '.db'
         self._testData = _testDataForFeatureSetName[featureSetLocalName]
         super(FeatureSetTests, self).__init__(featureSetLocalName, dataPath)
@@ -117,8 +122,12 @@ class FeatureSetTests(datadriven.DataDrivenTest):
         return protocol.FeatureSet
 
     def getDataModelInstance(self, localId, dataPath):
-        return sequenceAnnotations.Gff3DbFeatureSet(
-            self._dataset, localId, dataPath, self._datarepo)
+        featureSet = sequenceAnnotations.Gff3DbFeatureSet(
+            self._dataset, localId)
+        featureSet.setOntology(self._ontology)
+        featureSet.setReferenceSet(self._referenceSet)
+        featureSet.populateFromFile(dataPath)
+        return featureSet
 
     def testGetFeatureById(self):
         idString = _getFeatureCompoundId(
@@ -132,12 +141,12 @@ class FeatureSetTests(datadriven.DataDrivenTest):
         if self._testData["sampleParentId"] is not None:
             self.assertEqual(
                 datamodel.FeatureCompoundId.parse(
-                    feature.parentId).featureId,
+                    feature.parent_id).featureId,
                 str(self._testData["sampleParentId"]))
         else:
-            self.assertEqual(feature.parentId, '')
+            self.assertEqual(feature.parent_id, '')
         self.assertEqual(
-            feature.referenceName,
+            feature.reference_name,
             self._testData["referenceName"])
         self.assertEqual(
             feature.start,

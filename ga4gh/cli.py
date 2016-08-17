@@ -8,11 +8,17 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import argparse
+import glob
 import logging
 import operator
+import os
+import sys
+import textwrap
+import traceback
 import unittest
 import unittest.loader
 import unittest.suite
+import urlparse
 
 import requests
 
@@ -24,8 +30,15 @@ import ga4gh.frontend as frontend
 import ga4gh.configtest as configtest
 import ga4gh.exceptions as exceptions
 import ga4gh.datarepo as datarepo
-import ga4gh.repo_manager as repo_manager
 import ga4gh.protocol as protocol
+import ga4gh.datamodel.reads as reads
+import ga4gh.datamodel.variants as variants
+import ga4gh.datamodel.references as references
+import ga4gh.datamodel.sequenceAnnotations as sequenceAnnotations
+import ga4gh.datamodel.datasets as datasets
+import ga4gh.datamodel.ontologies as ontologies
+import ga4gh.datamodel.bio_metadata as biodata
+import ga4gh.datamodel.rna_quantification as rna_quantification
 
 
 # the maximum value of a long type in avro = 2**63 - 1
@@ -170,9 +183,10 @@ class AbstractQueryRunner(object):
         # depending on the prefix.
         filePrefix = "file://"
         if args.baseUrl.startswith(filePrefix):
-            dataDir = args.baseUrl[len(filePrefix):]
-            theBackend = backend.Backend(
-                datarepo.FileSystemDataRepository(dataDir))
+            registryPath = args.baseUrl[len(filePrefix):]
+            repo = datarepo.SqlDataRepository(registryPath)
+            repo.open(datarepo.MODE_READ)
+            theBackend = backend.Backend(repo)
             self._client = client.LocalClient(theBackend)
         else:
             self._client = client.HttpClient(
@@ -195,7 +209,7 @@ class FormattedOutputRunner(AbstractQueryRunner):
         line.
         """
         for gaObject in gaObjects:
-            print(gaObject.toJsonString())
+            print(protocol.toJson(gaObject))
 
     def _textOutput(self, gaObjects):
         """
@@ -230,20 +244,21 @@ class AbstractSearchRunner(FormattedOutputRunner):
     def __init__(self, args):
         super(AbstractSearchRunner, self).__init__(args)
         self._pageSize = args.pageSize
-        self._client.setPageSize(self._pageSize)
+        self._client.set_page_size(self._pageSize)
 
     def getAllDatasets(self):
         """
         Returns all datasets on the server.
         """
-        return self._client.searchDatasets()
+        return self._client.search_datasets()
 
     def getAllVariantSets(self):
         """
         Returns all variant sets on the server.
         """
         for dataset in self.getAllDatasets():
-            iterator = self._client.searchVariantSets(datasetId=dataset.id)
+            iterator = self._client.search_variant_sets(
+                dataset_id=dataset.id)
             for variantSet in iterator:
                 yield variantSet
 
@@ -252,7 +267,8 @@ class AbstractSearchRunner(FormattedOutputRunner):
         Returns all feature sets on the server.
         """
         for dataset in self.getAllDatasets():
-            iterator = self._client.searchFeatureSets(datasetId=dataset.id)
+            iterator = self._client.search_feature_sets(
+                dataset_id=dataset.id)
             for featureSet in iterator:
                 yield featureSet
 
@@ -261,8 +277,8 @@ class AbstractSearchRunner(FormattedOutputRunner):
         Returns all readgroup sets on the server.
         """
         for dataset in self.getAllDatasets():
-            iterator = self._client.searchReadGroupSets(
-                datasetId=dataset.id)
+            iterator = self._client.search_read_group_sets(
+                dataset_id=dataset.id)
             for readGroupSet in iterator:
                 yield readGroupSet
 
@@ -271,21 +287,22 @@ class AbstractSearchRunner(FormattedOutputRunner):
         Get all read groups in a read group set
         """
         for dataset in self.getAllDatasets():
-            iterator = self._client.searchReadGroupSets(
-                datasetId=dataset.id)
+            iterator = self._client.search_read_group_sets(
+                dataset_id=dataset.id)
             for readGroupSet in iterator:
-                readGroupSet = self._client.getReadGroupSet(readGroupSet.id)
-                for readGroup in readGroupSet.readGroups:
+                readGroupSet = self._client.get_read_group_set(
+                    readGroupSet.id)
+                for readGroup in readGroupSet.read_groups:
                     yield readGroup.id
 
     def getAllReferenceSets(self):
         """
         Returns all reference sets on the server.
         """
-        return self._client.searchReferenceSets()
-
+        return self._client.search_reference_sets()
 
 # Runners for the various search methods
+
 
 class SearchDatasetsRunner(AbstractSearchRunner):
     """
@@ -295,7 +312,7 @@ class SearchDatasetsRunner(AbstractSearchRunner):
         super(SearchDatasetsRunner, self).__init__(args)
 
     def run(self):
-        iterator = self._client.searchDatasets()
+        iterator = self._client.search_datasets()
         self._output(iterator)
 
 
@@ -307,10 +324,13 @@ class SearchReferenceSetsRunner(AbstractSearchRunner):
         super(SearchReferenceSetsRunner, self).__init__(args)
         self._accession = args.accession
         self._md5checksum = args.md5checksum
+        self._assemblyId = args.assemblyId
 
     def run(self):
-        iterator = self._client.searchReferenceSets(
-            accession=self._accession, md5checksum=self._md5checksum)
+        iterator = self._client.search_reference_sets(
+            accession=self._accession,
+            md5checksum=self._md5checksum,
+            assembly_id=self._assemblyId)
         self._output(iterator)
 
 
@@ -325,9 +345,9 @@ class SearchReferencesRunner(AbstractSearchRunner):
         self._md5checksum = args.md5checksum
 
     def _run(self, referenceSetId):
-        iterator = self._client.searchReferences(
+        iterator = self._client.search_references(
             accession=self._accession, md5checksum=self._md5checksum,
-            referenceSetId=referenceSetId)
+            reference_set_id=referenceSetId)
         self._output(iterator)
 
     def run(self):
@@ -347,7 +367,55 @@ class SearchVariantSetsRunner(AbstractSearchRunner):
         self._datasetId = args.datasetId
 
     def _run(self, datasetId):
-        iterator = self._client.searchVariantSets(datasetId=datasetId)
+        iterator = self._client.search_variant_sets(dataset_id=datasetId)
+        self._output(iterator)
+
+    def run(self):
+        if self._datasetId is None:
+            for dataset in self.getAllDatasets():
+                self._run(dataset.id)
+        else:
+            self._run(self._datasetId)
+
+
+class SearchBioSamplesRunner(AbstractSearchRunner):
+    """
+    Runner class for the biosamples/search method.
+    """
+    def __init__(self, args):
+        super(SearchBioSamplesRunner, self).__init__(args)
+        self._datasetId = args.datasetId
+        self._individualId = args.individualId
+        self._name = args.name
+
+    def _run(self, datasetId):
+        iterator = self._client.search_bio_samples(
+            datasetId,
+            name=self._name,
+            individual_id=self._individualId)
+        self._output(iterator)
+
+    def run(self):
+        if self._datasetId is None:
+            for dataset in self.getAllDatasets():
+                self._run(dataset.id)
+        else:
+            self._run(self._datasetId)
+
+
+class SearchIndividualsRunner(AbstractSearchRunner):
+    """
+    Runner class for the individuals/search method.
+    """
+    def __init__(self, args):
+        super(SearchIndividualsRunner, self).__init__(args)
+        self._datasetId = args.datasetId
+        self._name = args.name
+
+    def _run(self, datasetId):
+        iterator = self._client.search_bio_samples(
+            datasetId,
+            name=self._name)
         self._output(iterator)
 
     def run(self):
@@ -367,8 +435,8 @@ class SearchVariantAnnotationSetsRunner(AbstractSearchRunner):
         self._variantSetId = args.variantSetId
 
     def _run(self, variantSetId):
-        iterator = self._client.searchVariantAnnotationSets(
-            variantSetId=variantSetId)
+        iterator = self._client.search_variant_annotation_sets(
+            variant_set_id=variantSetId)
         self._output(iterator)
 
     def run(self):
@@ -384,7 +452,7 @@ class SearchFeatureSetsRunner(AbstractSearchRunner):
         self._datasetId = args.datasetId
 
     def _run(self, datasetId):
-        iterator = self._client.searchFeatureSets(datasetId=datasetId)
+        iterator = self._client.search_feature_sets(dataset_id=datasetId)
         self._output(iterator)
 
     def run(self):
@@ -405,8 +473,8 @@ class SearchReadGroupSetsRunner(AbstractSearchRunner):
         self._name = args.name
 
     def _run(self, datasetId):
-        iterator = self._client.searchReadGroupSets(
-            datasetId=datasetId, name=self._name)
+        iterator = self._client.search_read_group_sets(
+            dataset_id=datasetId, name=self._name)
         self._output(iterator)
 
     def run(self):
@@ -427,8 +495,8 @@ class SearchCallSetsRunner(AbstractSearchRunner):
         self._name = args.name
 
     def _run(self, variantSetId):
-        iterator = self._client.searchCallSets(
-            variantSetId=variantSetId, name=self._name)
+        iterator = self._client.search_call_sets(
+            variant_set_id=variantSetId, name=self._name)
         self._output(iterator)
 
     def run(self):
@@ -449,16 +517,17 @@ class VariantFormatterMixin(object):
         """
         for variant in gaObjects:
             print(
-                variant.id, variant.variantSetId, variant.names,
-                variant.referenceName, variant.start, variant.end,
-                variant.referenceBases, variant.alternateBases,
+                variant.id, variant.variant_set_id, variant.names,
+                variant.reference_name, variant.start, variant.end,
+                variant.reference_bases, variant.alternate_bases,
                 sep="\t", end="\t")
             for key, value in variant.info.items():
-                print(key, value, sep="=", end=";")
+                val = value.values[0].string_value
+                print(key, val, sep="=", end=";")
             print("\t", end="")
             for c in variant.calls:
                 print(
-                    c.callSetId, c.genotype, c.genotypeLikelihood, c.info,
+                    c.call_set_id, c.genotype, c.genotype_likelihood, c.info,
                     c.phaseset, sep=":", end="\t")
             print()
 
@@ -473,16 +542,16 @@ class AnnotationFormatterMixin(object):
         """
         for variantAnnotation in gaObjects:
             print(
-                variantAnnotation.id, variantAnnotation.variantId,
-                variantAnnotation.variantAnnotationSetId,
-                variantAnnotation.createDateTime, sep="\t", end="\t")
-            for effect in variantAnnotation.transcriptEffects:
-                print(effect.alternateBases, sep="|", end="|")
+                variantAnnotation.id, variantAnnotation.variant_id,
+                variantAnnotation.variant_annotation_set_id,
+                variantAnnotation.created, sep="\t", end="\t")
+            for effect in variantAnnotation.transcript_effects:
+                print(effect.alternate_bases, sep="|", end="|")
                 for so in effect.effects:
                     print(so.term, sep="&", end="|")
                     print(so.id, sep="&", end="|")
-                print(effect.hgvsAnnotation.transcript,
-                      effect.hgvsAnnotation.protein, sep="|", end="\t")
+                print(effect.hgvs_annotation.transcript,
+                      effect.hgvs_annotation.protein, sep="|", end="\t")
             print()
 
 
@@ -524,10 +593,11 @@ class SearchVariantsRunner(VariantFormatterMixin, AbstractSearchRunner):
             self._callSetIds = args.callSetIds.split(",")
 
     def _run(self, variantSetId):
-        iterator = self._client.searchVariants(
+        iterator = self._client.search_variants(
             start=self._start, end=self._end,
-            referenceName=self._referenceName,
-            variantSetId=variantSetId, callSetIds=self._callSetIds)
+            reference_name=self._referenceName,
+            variant_set_id=variantSetId,
+            call_set_ids=self._callSetIds)
         self._output(iterator)
 
     def run(self):
@@ -561,9 +631,10 @@ class SearchVariantAnnotationsRunner(
                 self._effects.append(term)
 
     def _run(self, variantAnnotationSetId):
-        iterator = self._client.searchVariantAnnotations(
-            variantAnnotationSetId=variantAnnotationSetId,
-            referenceName=self._referenceName, referenceId=self._referenceId,
+        iterator = self._client.search_variant_annotations(
+            variant_annotation_set_id=variantAnnotationSetId,
+            reference_name=self._referenceName,
+            reference_id=self._referenceId,
             start=self._start, end=self._end,
             effects=self._effects)
         self._output(iterator)
@@ -573,8 +644,8 @@ class SearchVariantAnnotationsRunner(
         Returns all variant annotation sets on the server.
         """
         for variantSet in self.getAllVariantSets():
-            iterator = self._client.searchVariantAnnotationSets(
-                variantSetId=variantSet.id)
+            iterator = self._client.search_variant_annotation_sets(
+                variant_set_id=variantSet.id)
             for variantAnnotationSet in iterator:
                 yield variantAnnotationSet
 
@@ -603,11 +674,11 @@ class SearchFeaturesRunner(FeatureFormatterMixin, AbstractSearchRunner):
             self._featureTypes = args.featureTypes.split(",")
 
     def _run(self, featureSetId):
-        iterator = self._client.searchFeatures(
+        iterator = self._client.search_features(
             start=self._start, end=self._end,
-            referenceName=self._referenceName,
-            featureSetId=featureSetId, parentId=self._parentId,
-            featureTypes=self._featureTypes)
+            reference_name=self._referenceName,
+            feature_set_id=featureSetId, parent_id=self._parentId,
+            feature_types=self._featureTypes)
         self._output(iterator)
 
     def run(self):
@@ -639,13 +710,15 @@ class SearchReadsRunner(AbstractSearchRunner):
         if referenceId is None:
             referenceId = self._referenceId
         if referenceId is None:
-            rg = self._client.getReadGroup(readGroupId=referenceGroupId)
-            iterator = self._client.searchReferences(rg.referenceSetId)
+            rg = self._client.get_read_group(
+                read_group_id=referenceGroupId)
+            iterator = self._client.search_references(rg.reference_set_id)
             for reference in iterator:
                 self._run(referenceGroupId, reference.id)
         else:
-            iterator = self._client.searchReads(
-                readGroupIds=[referenceGroupId], referenceId=referenceId,
+            iterator = self._client.search_reads(
+                read_group_ids=[referenceGroupId],
+                reference_id=referenceId,
                 start=self._start, end=self._end)
             self._output(iterator)
 
@@ -669,9 +742,82 @@ class SearchReadsRunner(AbstractSearchRunner):
             print(read.id)
 
 
+class SearchRnaQuantificationSetsRunner(AbstractSearchRunner):
+    """
+    Runner class for the rnaquantificationsets/search method
+    """
+    def __init__(self, args):
+        super(SearchRnaQuantificationSetsRunner, self).__init__(args)
+        self._datasetId = args.datasetId
+
+    def run(self):
+        iterator = self._client.search_rna_quantification_sets(
+            self._datasetId)
+        self._output(iterator)
+
+    def _textOutput(self, rnaQuants):
+        for rnaQuant in rnaQuants:
+            print(
+                rnaQuant.id, rnaQuant.dataset_id, rnaQuant.name,
+                sep="\t", end="\t")
+            print()
+
+
+class SearchRnaQuantificationsRunner(AbstractSearchRunner):
+    """
+    Runner class for the rnaquantifications/search method
+    """
+    def __init__(self, args):
+        super(SearchRnaQuantificationsRunner, self).__init__(args)
+        self._rnaQuantificationSetId = args.rnaQuantificationSetId
+
+    def run(self):
+        iterator = self._client.search_rna_quantifications(
+            self._rnaQuantificationSetId)
+        self._output(iterator)
+
+    def _textOutput(self, rnaQuants):
+        for rnaQuant in rnaQuants:
+            print(
+                rnaQuant.id, rnaQuant.description, rnaQuant.name,
+                sep="\t", end="\t")
+            for featureSet in rnaQuant.featureSetIds:
+                print(featureSet, sep=",", end="\t")
+            for readGroup in rnaQuant.readGroupIds:
+                print(readGroup, sep=",", end="")
+            print()
+
+
+class SearchExpressionLevelsRunner(AbstractSearchRunner):
+    """
+    Runner class for the expressionlevels/search method
+    """
+    def __init__(self, args):
+        super(SearchExpressionLevelsRunner, self).__init__(args)
+        self._rnaQuantificationId = args.rnaQuantificationId
+        self._feature_ids = []
+        if len(args.featureIds) > 0:
+            self._feature_ids = args.featureIds.split(",")
+        self.threshold = args.threshold
+
+    def run(self):
+        iterator = self._client.search_expression_levels(
+            rna_quantification_id=self._rnaQuantificationId,
+            feature_ids=self._feature_ids,
+            threshold=self.threshold)
+        self._output(iterator)
+
+    def _textOutput(self, expressionObjs):
+        for expression in expressionObjs:
+            print(
+                expression.id, expression.expression, expression.name,
+                expression.isNormalized, expression.rawReadCount,
+                expression.score, expression.units, sep="\t", end="\t")
+            print()
+
+
 # ListReferenceBases is an oddball, and doesn't fit either get or
 # search patterns.
-
 class ListReferenceBasesRunner(AbstractQueryRunner):
     """
     Runner class for the references/{id}/bases method
@@ -684,7 +830,7 @@ class ListReferenceBasesRunner(AbstractQueryRunner):
         self._outputFormat = args.outputFormat
 
     def run(self):
-        sequence = self._client.listReferenceBases(
+        sequence = self._client.list_reference_bases(
             self._referenceId, self._start, self._end)
         if self._outputFormat == "text":
             print(sequence)
@@ -706,7 +852,7 @@ class GetReferenceSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetReferenceSetRunner, self).__init__(args)
-        self._method = self._client.getReferenceSet
+        self._method = self._client.get_reference_set
 
 
 class GetReferenceRunner(AbstractGetRunner):
@@ -715,7 +861,7 @@ class GetReferenceRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetReferenceRunner, self).__init__(args)
-        self._method = self._client.getReference
+        self._method = self._client.get_reference
 
 
 class GetReadGroupSetRunner(AbstractGetRunner):
@@ -724,7 +870,7 @@ class GetReadGroupSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetReadGroupSetRunner, self).__init__(args)
-        self._method = self._client.getReadGroupSet
+        self._method = self._client.get_read_group_set
 
 
 class GetReadGroupRunner(AbstractGetRunner):
@@ -733,7 +879,25 @@ class GetReadGroupRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetReadGroupRunner, self).__init__(args)
-        self._method = self._client.getReadGroup
+        self._method = self._client.get_read_group
+
+
+class GetBioSampleRunner(AbstractGetRunner):
+    """
+    Runner class for the references/{id} method
+    """
+    def __init__(self, args):
+        super(GetBioSampleRunner, self).__init__(args)
+        self._method = self._client.getBioSample
+
+
+class GetIndividualRunner(AbstractGetRunner):
+    """
+    Runner class for the references/{id} method
+    """
+    def __init__(self, args):
+        super(GetIndividualRunner, self).__init__(args)
+        self._method = self._client.get_individual
 
 
 class GetCallSetRunner(AbstractGetRunner):
@@ -742,7 +906,7 @@ class GetCallSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetCallSetRunner, self).__init__(args)
-        self._method = self._client.getCallSet
+        self._method = self._client.get_call_set
 
 
 class GetDatasetRunner(AbstractGetRunner):
@@ -751,7 +915,7 @@ class GetDatasetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetDatasetRunner, self).__init__(args)
-        self._method = self._client.getDataset
+        self._method = self._client.get_dataset
 
 
 class GetVariantRunner(VariantFormatterMixin, AbstractGetRunner):
@@ -760,7 +924,7 @@ class GetVariantRunner(VariantFormatterMixin, AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetVariantRunner, self).__init__(args)
-        self._method = self._client.getVariant
+        self._method = self._client.get_variant
 
 
 class GetVariantSetRunner(AbstractGetRunner):
@@ -769,7 +933,7 @@ class GetVariantSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetVariantSetRunner, self).__init__(args)
-        self._method = self._client.getVariantSet
+        self._method = self._client.get_variant_set
 
 
 class GetVariantAnnotationSetRunner(AbstractGetRunner):
@@ -778,7 +942,7 @@ class GetVariantAnnotationSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetVariantAnnotationSetRunner, self).__init__(args)
-        self._method = self._client.getVariantAnnotationSet
+        self._method = self._client.get_variant_annotation_set
 
 
 class GetFeatureRunner(FeatureFormatterMixin, AbstractGetRunner):
@@ -787,7 +951,7 @@ class GetFeatureRunner(FeatureFormatterMixin, AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetFeatureRunner, self).__init__(args)
-        self._method = self._client.getFeature
+        self._method = self._client.get_feature
 
 
 class GetFeatureSetRunner(AbstractGetRunner):
@@ -796,7 +960,34 @@ class GetFeatureSetRunner(AbstractGetRunner):
     """
     def __init__(self, args):
         super(GetFeatureSetRunner, self).__init__(args)
-        self._method = self._client.getFeatureSet
+        self._method = self._client.get_feature_set
+
+
+class GetRnaQuantificationRunner(AbstractGetRunner):
+    """
+    Runner class for the rnaquantifications/{id} method
+    """
+    def __init__(self, args):
+        super(GetRnaQuantificationRunner, self).__init__(args)
+        self._method = self._client.get_rna_quantification
+
+
+class GetExpressionLevelRunner(AbstractGetRunner):
+    """
+    Runner class for the expressionlevels/{id} method
+    """
+    def __init__(self, args):
+        super(GetExpressionLevelRunner, self).__init__(args)
+        self._method = self._client.get_expression_level
+
+
+class GetRnaQuantificationSetRunner(AbstractGetRunner):
+    """
+    Runner class for the rnaquantificationsets/{id} method
+    """
+    def __init__(self, args):
+        super(GetRnaQuantificationSetRunner, self).__init__(args)
+        self._method = self._client.get_rna_quantification_set
 
 
 def addDisableUrllibWarningsArgument(parser):
@@ -1004,6 +1195,18 @@ def addNameArgument(parser):
         help="The name to search over")
 
 
+def addIndividualIdArgument(parser):
+    parser.add_argument(
+        "--individualId", default=None,
+        help="The ID of the individual")
+
+
+def addBioSampleIdArgument(parser):
+    parser.add_argument(
+        "--bioSampleId", default=None,
+        help="The ID of the biosample")
+
+
 def addClientGlobalOptions(parser):
     parser.add_argument(
         '--verbose', '-v', action='count', default=0,
@@ -1096,6 +1299,49 @@ def addFeatureSetsGetParser(subparsers):
     addGetArguments(parser)
 
 
+def addBioSamplesGetParser(subparsers):
+    parser = addSubparser(
+        subparsers, "biosamples-get", "Get a biosample by ID")
+    parser.set_defaults(runner=GetBioSampleRunner)
+    addGetArguments(parser)
+
+
+def addIndividualsGetParser(subparsers):
+    parser = addSubparser(
+        subparsers, "individuals-get", "Get a individual by ID")
+    parser.set_defaults(runner=GetIndividualRunner)
+    addGetArguments(parser)
+
+
+def addBioSamplesSearchParser(subparsers):
+    parser = subparsers.add_parser(
+        "biosamples-search",
+        description="Search for biosamples",
+        help="Search for biosamples.")
+    parser.set_defaults(runner=SearchBioSamplesRunner)
+    addUrlArgument(parser)
+    addOutputFormatArgument(parser)
+    addPageSizeArgument(parser)
+    addDatasetIdArgument(parser)
+    addNameArgument(parser)
+    addIndividualIdArgument(parser)
+    return parser
+
+
+def addIndividualsSearchParser(subparsers):
+    parser = subparsers.add_parser(
+        "individuals-search",
+        description="Search for individuals",
+        help="Search for individuals.")
+    parser.set_defaults(runner=SearchIndividualsRunner)
+    addUrlArgument(parser)
+    addOutputFormatArgument(parser)
+    addDatasetIdArgument(parser)
+    addPageSizeArgument(parser)
+    addNameArgument(parser)
+    return parser
+
+
 def addFeaturesSearchParser(subparsers):
     parser = subparsers.add_parser(
         "features-search",
@@ -1156,6 +1402,7 @@ def addReadGroupSetsSearchParser(subparsers):
     parser.set_defaults(runner=SearchReadGroupSetsRunner)
     addUrlArgument(parser)
     addOutputFormatArgument(parser)
+    addBioSampleIdArgument(parser)
     addPageSizeArgument(parser)
     addDatasetIdArgument(parser)
     addNameArgument(parser)
@@ -1168,6 +1415,7 @@ def addCallSetsSearchParser(subparsers):
     parser.set_defaults(runner=SearchCallSetsRunner)
     addUrlArgument(parser)
     addOutputFormatArgument(parser)
+    addBioSampleIdArgument(parser)
     addPageSizeArgument(parser)
     addNameArgument(parser)
     addVariantSetIdArgument(parser)
@@ -1303,6 +1551,28 @@ def addVariantsGetParser(subparsers):
     addGetArguments(parser)
 
 
+def addRnaQuantificationSetGetParser(subparsers):
+    parser = addSubparser(
+        subparsers, "rnaquantificationsets-get",
+        "Get a rna quantification set")
+    parser.set_defaults(runner=GetRnaQuantificationSetRunner)
+    addGetArguments(parser)
+
+
+def addRnaQuantificationGetParser(subparsers):
+    parser = addSubparser(
+        subparsers, "rnaquantifications-get", "Get a rna quantification")
+    parser.set_defaults(runner=GetRnaQuantificationRunner)
+    addGetArguments(parser)
+
+
+def addExpressionLevelGetParser(subparsers):
+    parser = addSubparser(
+        subparsers, "expressionlevels-get", "Get a expression level")
+    parser.set_defaults(runner=GetExpressionLevelRunner)
+    addGetArguments(parser)
+
+
 def addReferencesBasesListParser(subparsers):
     parser = addSubparser(
         subparsers, "references-list-bases", "List bases of a reference")
@@ -1317,6 +1587,53 @@ def addReferencesBasesListParser(subparsers):
     addIdArgument(parser)
     addStartArgument(parser)
     addEndArgument(parser, defaultValue=None)
+
+
+def addRnaQuantificationSetsSearchParser(subparsers):
+    parser = subparsers.add_parser(
+        "rnaquantificationsets-search",
+        description="Search for rna quantification set",
+        help="Search for rna quantification set")
+    parser.set_defaults(runner=SearchRnaQuantificationSetsRunner)
+    addUrlArgument(parser)
+    addPageSizeArgument(parser)
+    addDatasetIdArgument(parser)
+    addOutputFormatArgument(parser)
+    return parser
+
+
+def addRnaQuantificationsSearchParser(subparsers):
+    parser = subparsers.add_parser(
+        "rnaquantifications-search",
+        description="Search for rna quantification",
+        help="Search for rna quantification")
+    parser.set_defaults(runner=SearchRnaQuantificationsRunner)
+    addUrlArgument(parser)
+    addPageSizeArgument(parser)
+    parser.add_argument(
+        "--rnaQuantificationSetId", default=None,
+        help="The rnaQuantification set to search over")
+    addOutputFormatArgument(parser)
+    return parser
+
+
+def addExpressionLevelsSearchParser(subparsers):
+    parser = subparsers.add_parser(
+        "expressionlevels-search",
+        description="Search for feature expression",
+        help="Search for feature expression")
+    parser.set_defaults(runner=SearchExpressionLevelsRunner)
+    addUrlArgument(parser)
+    addPageSizeArgument(parser)
+    addFeatureIdsArgument(parser)
+    parser.add_argument(
+        "--rnaQuantificationId", default='',
+        help="The RNA Quantification Id to search over")
+    parser.add_argument(
+        "--threshold", default=0.0, type=float,
+        help="The minimum value for expression results to report.")
+    addOutputFormatArgument(parser)
+    return parser
 
 
 def getClientParser():
@@ -1334,6 +1651,10 @@ def getClientParser():
     addFeaturesGetParser(subparsers)
     addFeatureSetsGetParser(subparsers)
     addFeatureSetsSearchParser(subparsers)
+    addBioSamplesSearchParser(subparsers)
+    addBioSamplesGetParser(subparsers)
+    addIndividualsSearchParser(subparsers)
+    addIndividualsGetParser(subparsers)
     addReferenceSetsSearchParser(subparsers)
     addReferencesSearchParser(subparsers)
     addReadGroupSetsSearchParser(subparsers)
@@ -1347,7 +1668,13 @@ def getClientParser():
     addCallSetsGetParser(subparsers)
     addVariantsGetParser(subparsers)
     addDatasetsGetParser(subparsers)
+    addRnaQuantificationSetGetParser(subparsers)
+    addRnaQuantificationGetParser(subparsers)
+    addExpressionLevelGetParser(subparsers)
     addReferencesBasesListParser(subparsers)
+    addRnaQuantificationSetsSearchParser(subparsers)
+    addRnaQuantificationsSearchParser(subparsers)
+    addExpressionLevelsSearchParser(subparsers)
     return parser
 
 
@@ -1384,12 +1711,12 @@ class Ga2VcfRunner(SearchVariantsRunner):
             self._binaryOutput = True
 
     def run(self):
-        variantSet = self._client.getVariantSet(self._variantSetId)
-        iterator = self._client.searchVariants(
+        variantSet = self._client.get_variant_set(self._variantSetId)
+        iterator = self._client.search_variants(
             start=self._start, end=self._end,
-            referenceName=self._referenceName,
-            variantSetId=self._variantSetId,
-            callSetIds=self._callSetIds)
+            reference_name=self._referenceName,
+            variant_set_id=self._variantSetId,
+            call_set_ids=self._callSetIds)
         # do conversion
         vcfConverter = converters.VcfConverter(
             variantSet, iterator, self._outputFile, self._binaryOutput)
@@ -1558,448 +1885,879 @@ def configtest_main(parser=None):
 ##############################################################################
 
 
-def getRawInput(displayString):
-    userResponse = raw_input(displayString)
-    return userResponse
+def getNameFromPath(filePath):
+    """
+    Returns the filename of the specified path without its extensions.
+    This is usually how we derive the default name for a given object.
+    """
+    if len(filePath) == 0:
+        raise ValueError("Cannot have empty path for name")
+    fileName = os.path.split(os.path.normpath(filePath))[1]
+    # We need to handle things like .fa.gz, so we can't use
+    # os.path.splitext
+    ret = fileName.split(".")[0]
+    assert ret != ""
+    return ret
 
 
-class AbstractRepoCommandRunner(object):
+def getRawInput(display):
+    """
+    Wrapper around raw_input; put into separate function so that it
+    can be easily mocked for tests.
+    """
+    return raw_input(display)
 
+
+class RepoManager(object):
+    """
+    Class that provide command line functionality to manage a
+    data repository.
+    """
     def __init__(self, args):
-        self.args = args
-        self.repoPath = args.repoPath
-        self.repoManager = repo_manager.RepoManager(self.repoPath)
-        if 'force' in args:
-            self.force = args.force
+        self._args = args
+        self._registryPath = args.registryPath
+        self._repo = datarepo.SqlDataRepository(self._registryPath)
 
-    def confirmRun(self, func, deleteString):
-        if self.force:
+    def _confirmDelete(self, objectType, name, func):
+        if self._args.force:
             func()
         else:
             displayString = (
-                "Are you sure you want to delete data in {}? "
-                "[y|N] ".format(deleteString))
+                "Are you sure you want to delete the {} '{}'? "
+                "[y|N] ".format(objectType, name))
             userResponse = getRawInput(displayString)
             if userResponse.strip() == 'y':
                 func()
             else:
                 print("Aborted")
 
+    def _updateRepo(self, func, *args, **kwargs):
+        """
+        Runs the specified function that updates the repo with the specified
+        arguments. This method ensures that all updates are transactional,
+        so that if any part of the update fails no changes are made to the
+        repo.
+        """
+        # TODO how do we make this properly transactional?
+        self._repo.open(datarepo.MODE_WRITE)
+        try:
+            func(*args, **kwargs)
+            self._repo.commit()
+        finally:
+            self._repo.close()
 
-class AbstractRepoAddCommandRunner(AbstractRepoCommandRunner):
+    def _openRepo(self):
+        if not self._repo.exists():
+            raise exceptions.RepoManagerException(
+                "Repo '{}' does not exist. Please create a new repo "
+                "using the 'init' command.".format(self._registryPath))
+        self._repo.open(datarepo.MODE_READ)
 
-    def __init__(self, args):
-        super(AbstractRepoAddCommandRunner, self).__init__(args)
-        self.filePath = args.filePath
+    def _checkSequenceOntology(self, ontology):
+        so = ontologies.SEQUENCE_ONTOLOGY_PREFIX
+        if ontology.getOntologyPrefix() != so:
+            raise exceptions.RepoManagerException(
+                "Ontology '{}' does not have ontology prefix '{}'".format(
+                    ontology.getName(), so))
 
+    def _getFilePath(self, filePath, useRelativePath):
+        return filePath if useRelativePath else os.path.abspath(filePath)
 
-class AbstractRepoAddMoveCommandRunner(AbstractRepoAddCommandRunner):
+    def init(self):
+        forceMessage = (
+            "Respository '{}' already exists. Use --force to overwrite")
+        if self._repo.exists():
+            if self._args.force:
+                self._repo.delete()
+            else:
+                raise exceptions.RepoManagerException(
+                    forceMessage.format(self._registryPath))
+        self._updateRepo(self._repo.initialise)
 
-    def __init__(self, args):
-        super(AbstractRepoAddMoveCommandRunner, self).__init__(args)
-        self.moveMode = args.moveMode
+    def list(self):
+        """
+        Lists the contents of this repo.
+        """
+        self._openRepo()
+        # TODO this is _very_ crude. We need much more options and detail here.
+        self._repo.printSummary()
 
+    def verify(self):
+        """
+        Checks that the data pointed to in the repository works and
+        we don't have any broken URLs, missing files, etc.
+        """
+        self._openRepo()
+        self._repo.verify()
 
-class AbstractRepoDatasetCommandRunner(AbstractRepoCommandRunner):
+    def addOntology(self):
+        """
+        Adds a new Ontology to this repo.
+        """
+        self._openRepo()
+        name = self._args.name
+        filePath = self._getFilePath(self._args.filePath,
+                                     self._args.relativePath)
+        if name is None:
+            name = getNameFromPath(filePath)
+        ontology = ontologies.Ontology(name)
+        ontology.populateFromFile(filePath)
+        self._updateRepo(self._repo.insertOntology, ontology)
 
-    def __init__(self, args):
-        super(AbstractRepoDatasetCommandRunner, self).__init__(args)
-        self.datasetName = args.datasetName
+    def addDataset(self):
+        """
+        Adds a new dataset into this repo.
+        """
+        self._openRepo()
+        dataset = datasets.Dataset(self._args.datasetName)
+        dataset.setDescription(self._args.description)
+        self._updateRepo(self._repo.insertDataset, dataset)
 
+    def addReferenceSet(self):
+        """
+        Adds a new reference set into this repo.
+        """
+        self._openRepo()
+        name = self._args.name
+        filePath = self._getFilePath(self._args.filePath,
+                                     self._args.relativePath)
+        if name is None:
+            name = getNameFromPath(self._args.filePath)
+        referenceSet = references.HtslibReferenceSet(name)
+        referenceSet.populateFromFile(filePath)
+        referenceSet.setDescription(self._args.description)
+        referenceSet.setNcbiTaxonId(self._args.ncbiTaxonId)
+        referenceSet.setIsDerived(self._args.isDerived)
+        referenceSet.setAssemblyId(self._args.assemblyId)
+        sourceAccessions = []
+        if self._args.sourceAccessions is not None:
+            sourceAccessions = self._args.sourceAccessions.split(",")
+        referenceSet.setSourceAccessions(sourceAccessions)
+        referenceSet.setSourceUri(self._args.sourceUri)
+        self._updateRepo(self._repo.insertReferenceSet, referenceSet)
 
-class AbstractRepoDatasetFilepathCommandRunner(
-        AbstractRepoDatasetCommandRunner):
+    def addReadGroupSet(self):
+        """
+        Adds a new ReadGroupSet into this repo.
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        dataUrl = self._args.dataFile
+        indexFile = self._args.indexFile
+        parsed = urlparse.urlparse(dataUrl)
+        # TODO, add https support and others when they have been
+        # tested.
+        if parsed.scheme in ['http', 'ftp']:
+            if indexFile is None:
+                raise exceptions.MissingIndexException(dataUrl)
+        else:
+            if indexFile is None:
+                indexFile = dataUrl + ".bai"
+            dataUrl = self._getFilePath(self._args.dataFile,
+                                        self._args.relativePath)
+            indexFile = self._getFilePath(indexFile, self._args.relativePath)
+        name = self._args.name
+        if self._args.name is None:
+            name = getNameFromPath(dataUrl)
+        readGroupSet = reads.HtslibReadGroupSet(dataset, name)
+        readGroupSet.populateFromFile(dataUrl, indexFile)
+        referenceSetName = self._args.referenceSetName
+        if referenceSetName is None:
+            # Try to find a reference set name from the BAM header.
+            referenceSetName = readGroupSet.getBamHeaderReferenceSetName()
+        referenceSet = self._repo.getReferenceSetByName(referenceSetName)
+        readGroupSet.setReferenceSet(referenceSet)
+        self._updateRepo(self._repo.insertReadGroupSet, readGroupSet)
 
-    def __init__(self, args):
-        super(AbstractRepoDatasetFilepathCommandRunner, self).__init__(args)
-        self.filePath = args.filePath
-        self.moveMode = args.moveMode
+    def addVariantSet(self):
+        """
+        Adds a new VariantSet into this repo.
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        dataUrls = self._args.dataFiles
+        name = self._args.name
+        if len(dataUrls) == 1:
+            if self._args.name is None:
+                name = getNameFromPath(dataUrls[0])
+            if os.path.isdir(dataUrls[0]):
+                # Read in the VCF files from the directory.
+                # TODO support uncompressed VCF and BCF files
+                vcfDir = dataUrls[0]
+                pattern = os.path.join(vcfDir, "*.vcf.gz")
+                dataUrls = glob.glob(pattern)
+                if len(dataUrls) == 0:
+                    raise exceptions.RepoManagerException(
+                        "Cannot find any VCF files in the directory "
+                        "'{}'.".format(vcfDir))
+                dataUrls[0] = self._getFilePath(dataUrls[0],
+                                                self._args.relativePath)
+        elif self._args.name is None:
+            raise exceptions.RepoManagerException(
+                "Cannot infer the intended name of the VariantSet when "
+                "more than one VCF file is provided. Please provide a "
+                "name argument using --name.")
+        parsed = urlparse.urlparse(dataUrls[0])
+        if parsed.scheme not in ['http', 'ftp']:
+            dataUrls = map(lambda url: self._getFilePath(
+                url, self._args.relativePath), dataUrls)
+        # Now, get the index files for the data files that we've now obtained.
+        indexFiles = self._args.indexFiles
+        if indexFiles is None:
+            # First check if all the paths exist locally, as they must
+            # if we are making a default index path.
+            for dataUrl in dataUrls:
+                if not os.path.exists(dataUrl):
+                    raise exceptions.MissingIndexException(
+                        "Cannot find file '{}'. All variant files must be "
+                        "stored locally if the default index location is "
+                        "used. If you are trying to create a VariantSet "
+                        "based on remote URLs, please download the index "
+                        "files to the local file system and provide them "
+                        "with the --indexFiles argument".format(dataUrl))
+            # We assume that the indexes are made by adding .tbi
+            indexSuffix = ".tbi"
+            # TODO support BCF input properly here by adding .csi
+            indexFiles = [filename + indexSuffix for filename in dataUrls]
+        indexFiles = map(lambda url: self._getFilePath(
+            url, self._args.relativePath), indexFiles)
+        variantSet = variants.HtslibVariantSet(dataset, name)
+        variantSet.populateFromFile(dataUrls, indexFiles)
+        # Get the reference set that is associated with the variant set.
+        referenceSetName = self._args.referenceSetName
+        if referenceSetName is None:
+            # Try to find a reference set name from the VCF header.
+            referenceSetName = variantSet.getVcfHeaderReferenceSetName()
+        if referenceSetName is None:
+            raise exceptions.RepoManagerException(
+                "Cannot infer the ReferenceSet from the VCF header. Please "
+                "specify the ReferenceSet to associate with this "
+                "VariantSet using the --referenceSetName option")
+        referenceSet = self._repo.getReferenceSetByName(referenceSetName)
+        variantSet.setReferenceSet(referenceSet)
 
+        # Now check for annotations
+        annotationSets = []
+        if variantSet.isAnnotated() and self._args.addAnnotationSets:
+            ontologyName = self._args.ontologyName
+            if ontologyName is None:
+                raise exceptions.RepoManagerException(
+                    "A sequence ontology name must be provided")
+            ontology = self._repo.getOntologyByName(ontologyName)
+            self._checkSequenceOntology(ontology)
+            for annotationSet in variantSet.getVariantAnnotationSets():
+                annotationSet.setOntology(ontology)
+                annotationSets.append(annotationSet)
 
-class CheckRunner(AbstractRepoCommandRunner):
+        # Add the annotation sets and the variant set as an atomic update
+        def updateRepo():
+            self._repo.insertVariantSet(variantSet)
+            for annotationSet in annotationSets:
+                self._repo.insertVariantAnnotationSet(annotationSet)
+        self._updateRepo(updateRepo)
 
-    def __init__(self, args):
-        super(CheckRunner, self).__init__(args)
-        self.doConsistencyCheck = not args.skipConsistencyCheck
+    def removeReferenceSet(self):
+        """
+        Removes a referenceSet from the repo.
+        """
+        self._openRepo()
+        referenceSet = self._repo.getReferenceSetByName(
+            self._args.referenceSetName)
 
-    def run(self):
-        self.repoManager.check(self.doConsistencyCheck)
-
-
-class ListRunner(AbstractRepoCommandRunner):
-
-    def __init__(self, args):
-        super(ListRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.list()
-
-
-class DestroyRunner(AbstractRepoCommandRunner):
-
-    def __init__(self, args):
-        super(DestroyRunner, self).__init__(args)
-
-    def run(self):
-        def func(): self.repoManager.destroy()
-        self.confirmRun(func, 'the Data Repository')
-
-
-class InitRunner(AbstractRepoCommandRunner):
-
-    def __init__(self, args):
-        super(InitRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.init()
-
-
-class AddDatasetRunner(AbstractRepoDatasetCommandRunner):
-
-    def __init__(self, args):
-        super(AddDatasetRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.addDataset(self.datasetName)
-
-
-class AddOntologyMapRunner(AbstractRepoAddMoveCommandRunner):
-
-    def __init__(self, args):
-        super(AddOntologyMapRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.addOntologyMap(self.filePath, self.moveMode)
-
-
-class RemoveOntologyMapRunner(AbstractRepoCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveOntologyMapRunner, self).__init__(args)
-        self.ontologyMapName = args.ontologyMapName
-
-    def run(self):
-        def func(): self.repoManager.removeOntologyMap(self.ontologyMapName)
-        self.confirmRun(func, 'ontology map {}'.format(self.ontologyMapName))
-
-
-class RemoveDatasetRunner(AbstractRepoDatasetCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveDatasetRunner, self).__init__(args)
-
-    def run(self):
-        def func(): self.repoManager.removeDataset(self.datasetName)
-        self.confirmRun(func, 'dataset {}'.format(self.datasetName))
-
-
-class AddReferenceSetRunner(AbstractRepoAddMoveCommandRunner):
-
-    def __init__(self, args):
-        super(AddReferenceSetRunner, self).__init__(args)
-        self.metadata = {
-            'description': args.description,
-        }
-
-    def run(self):
-        self.repoManager.addReferenceSet(
-            self.filePath, self.moveMode, self.metadata)
-
-
-class RemoveReferenceSetRunner(AbstractRepoCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveReferenceSetRunner, self).__init__(args)
-        self.referenceSetName = args.referenceSetName
-
-    def run(self):
         def func():
-            self.repoManager.removeReferenceSet(self.referenceSetName)
-        self.confirmRun(
-            func, 'reference set {}'.format(self.referenceSetName))
+            self._updateRepo(self._repo.removeReferenceSet, referenceSet)
+        self._confirmDelete("ReferenceSet", referenceSet.getLocalId(), func)
 
+    def removeReadGroupSet(self):
+        """
+        Removes a readGroupSet from the repo.
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        readGroupSet = dataset.getReadGroupSetByName(
+            self._args.readGroupSetName)
 
-class AddReadGroupSetRunner(AbstractRepoDatasetFilepathCommandRunner):
-
-    def __init__(self, args):
-        super(AddReadGroupSetRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.addReadGroupSet(
-            self.datasetName, self.filePath, self.moveMode)
-
-
-class RemoveReadGroupSetRunner(AbstractRepoDatasetCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveReadGroupSetRunner, self).__init__(args)
-        self.readGroupSetName = args.readGroupSetName
-
-    def run(self):
         def func():
-            self.repoManager.removeReadGroupSet(
-                self.datasetName, self.readGroupSetName)
-        self.confirmRun(
-            func, 'read group set {}'.format(self.readGroupSetName))
+            self._updateRepo(self._repo.removeReadGroupSet, readGroupSet)
+        self._confirmDelete("ReadGroupSet", readGroupSet.getLocalId(), func)
 
+    def removeVariantSet(self):
+        """
+        Removes a variantSet from the repo.
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        variantSet = dataset.getVariantSetByName(self._args.variantSetName)
 
-class AddVariantSetRunner(AbstractRepoDatasetFilepathCommandRunner):
-
-    def __init__(self, args):
-        super(AddVariantSetRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.addVariantSet(
-            self.datasetName, self.filePath, self.moveMode)
-
-
-class RemoveVariantSetRunner(AbstractRepoDatasetCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveVariantSetRunner, self).__init__(args)
-        self.variantSetName = args.variantSetName
-
-    def run(self):
         def func():
-            self.repoManager.removeVariantSet(
-                self.datasetName, self.variantSetName)
-        self.confirmRun(func, 'variant set {}'.format(self.variantSetName))
+            self._updateRepo(self._repo.removeVariantSet, variantSet)
+        self._confirmDelete("VariantSet", variantSet.getLocalId(), func)
 
+    def removeDataset(self):
+        """
+        Removes a dataset from the repo.
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
 
-class AddFeatureSetRunner(AbstractRepoDatasetFilepathCommandRunner):
-
-    def __init__(self, args):
-        super(AddFeatureSetRunner, self).__init__(args)
-
-    def run(self):
-        self.repoManager.addFeatureSet(
-            self.datasetName, self.filePath, self.moveMode)
-
-
-class RemoveFeatureSetRunner(AbstractRepoDatasetCommandRunner):
-
-    def __init__(self, args):
-        super(RemoveFeatureSetRunner, self).__init__(args)
-        self.featureSetName = args.featureSetName
-
-    def run(self):
         def func():
-            self.repoManager.removeFeatureSet(
-                self.datasetName, self.featureSetName)
-        self.confirmRun(func, 'feature set {}'.format(self.featureSetName))
+            self._updateRepo(self._repo.removeDataset, dataset)
+        self._confirmDelete("Dataset", dataset.getLocalId(), func)
+
+    def addFeatureSet(self):
+        """
+        Adds a new feature set into this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        filePath = self._getFilePath(self._args.filePath,
+                                     self._args.relativePath)
+        name = getNameFromPath(self._args.filePath)
+        featureSet = sequenceAnnotations.Gff3DbFeatureSet(
+            dataset, name)
+        referenceSetName = self._args.referenceSetName
+        if referenceSetName is None:
+            raise exceptions.RepoManagerException(
+                "A reference set name must be provided")
+        referenceSet = self._repo.getReferenceSetByName(referenceSetName)
+        featureSet.setReferenceSet(referenceSet)
+        ontologyName = self._args.ontologyName
+        if ontologyName is None:
+            raise exceptions.RepoManagerException(
+                "A sequence ontology name must be provided")
+        ontology = self._repo.getOntologyByName(ontologyName)
+        self._checkSequenceOntology(ontology)
+        featureSet.setOntology(ontology)
+        featureSet.populateFromFile(filePath)
+        self._updateRepo(self._repo.insertFeatureSet, featureSet)
+
+    def removeFeatureSet(self):
+        """
+        Removes a feature set from this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        featureSet = dataset.getFeatureSetByName(self._args.featureSetName)
+
+        def func():
+            self._updateRepo(self._repo.removeFeatureSet, featureSet)
+        self._confirmDelete("FeatureSet", featureSet.getLocalId(), func)
+
+    def addBioSample(self):
+        """
+        Adds a new biosample into this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        bioSample = biodata.BioSample(dataset, self._args.bioSampleName)
+        bioSample.populateFromJson(self._args.bioSample)
+        self._updateRepo(self._repo.insertBioSample, bioSample)
+
+    def removeBioSample(self):
+        """
+        Removes a biosample from this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        bioSample = dataset.getBioSampleByName(self._args.bioSampleName)
+
+        def func():
+            self._updateRepo(self._repo.removeBioSample, bioSample)
+        self._confirmDelete("BioSample", bioSample.getLocalId(), func)
+
+    def addIndividual(self):
+        """
+        Adds a new individual into this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        individual = biodata.Individual(dataset, self._args.individualName)
+        individual.populateFromJson(self._args.individual)
+        self._updateRepo(self._repo.insertIndividual, individual)
+
+    def removeIndividual(self):
+        """
+        Removes an individual from this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        individual = dataset.getIndividualByName(self._args.individualName)
+
+        def func():
+            self._updateRepo(self._repo.removeIndividual, individual)
+        self._confirmDelete("Individual", individual.getLocalId(), func)
+
+    def removeOntology(self):
+        """
+        Removes an ontology from the repo.
+        """
+        self._openRepo()
+        ontology = self._repo.getOntologyByName(self._args.ontologyName)
+
+        def func():
+            self._updateRepo(self._repo.removeOntology, ontology)
+        self._confirmDelete("Ontology", ontology.getName(), func)
+
+    def addRnaQuantificationSet(self):
+        """
+        Adds an rnaQuantificationSet into this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        if self._args.name is None:
+            name = getNameFromPath(self._args.filePath)
+        else:
+            name = self._args.name
+        rnaQuantificationSet = rna_quantification.SqliteRnaQuantificationSet(
+            dataset, name)
+        referenceSetName = self._args.referenceSetName
+        if referenceSetName is None:
+            raise exceptions.RepoManagerException(
+                "A reference set name must be provided")
+        referenceSet = self._repo.getReferenceSetByName(referenceSetName)
+        rnaQuantificationSet.setReferenceSet(referenceSet)
+        rnaQuantificationSet.populateFromFile(self._args.filePath)
+        self._updateRepo(
+            self._repo.insertRnaQuantificationSet, rnaQuantificationSet)
+
+    def removeRnaQuantificationSet(self):
+        """
+        Removes an rnaQuantificationSet from this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        rnaQuantSet = dataset.getRnaQuantificationSetByName(
+            self._args.rnaQuantificationSetName)
+
+        def func():
+            self._updateRepo(self._repo.removeRnaQuantification, rnaQuantSet)
+        self._confirmDelete(
+            "RnaQuantificationSet", rnaQuantSet.getLocalId(), func)
+
+    #
+    # Methods to simplify adding common arguments to the parser.
+    #
+
+    @classmethod
+    def addRepoArgument(cls, subparser):
+        subparser.add_argument(
+            "registryPath",
+            help="the location of the registry database")
+
+    @classmethod
+    def addForceOption(cls, subparser):
+        subparser.add_argument(
+            "-f", "--force", action='store_true',
+            default=False, help="do not prompt for confirmation")
+
+    @classmethod
+    def addRelativePathOption(cls, subparser):
+        subparser.add_argument(
+            "-r", "--relativePath", action='store_true',
+            default=False, help="store relative path in database")
+
+    @classmethod
+    def addDescriptionOption(cls, subparser, objectType):
+        subparser.add_argument(
+            "-d", "--description", default="",
+            help="The human-readable description of the {}.".format(
+                objectType))
+
+    @classmethod
+    def addDatasetNameArgument(cls, subparser):
+        subparser.add_argument(
+            "datasetName", help="the name of the dataset")
+
+    @classmethod
+    def addReferenceSetNameOption(cls, subparser, objectType):
+        helpText = (
+            "the name of the reference set to associate with this {}"
+        ).format(objectType)
+        subparser.add_argument(
+            "-R", "--referenceSetName", default=None, help=helpText)
+
+    @classmethod
+    def addSequenceOntologyNameOption(cls, subparser, objectType):
+        helpText = (
+            "the name of the sequence ontology instance used to "
+            "translate ontology term names to IDs in this {}"
+        ).format(objectType)
+        subparser.add_argument(
+            "-O", "--ontologyName", default=None, help=helpText)
+
+    @classmethod
+    def addOntologyNameArgument(cls, subparser):
+        subparser.add_argument(
+            "ontologyName",
+            help="the name of the ontology")
+
+    @classmethod
+    def addReadGroupSetNameArgument(cls, subparser):
+        subparser.add_argument(
+            "readGroupSetName",
+            help="the name of the read group set")
+
+    @classmethod
+    def addVariantSetNameArgument(cls, subparser):
+        subparser.add_argument(
+            "variantSetName",
+            help="the name of the variant set")
+
+    @classmethod
+    def addFeatureSetNameArgument(cls, subparser):
+        subparser.add_argument(
+            "featureSetName",
+            help="the name of the feature set")
+
+    @classmethod
+    def addIndividualNameArgument(cls, subparser):
+        subparser.add_argument(
+            "individualName",
+            help="the name of the individual")
+
+    @classmethod
+    def addBioSampleNameArgument(cls, subparser):
+        subparser.add_argument(
+            "bioSampleName",
+            help="the name of the biosample")
+
+    @classmethod
+    def addBioSampleArgument(cls, subparser):
+        subparser.add_argument(
+            "bioSample",
+            help="the JSON of the biosample")
+
+    @classmethod
+    def addIndividualArgument(cls, subparser):
+        subparser.add_argument(
+            "individual",
+            help="the JSON of the individual")
+
+    @classmethod
+    def addFilePathArgument(cls, subparser, helpText):
+        subparser.add_argument("filePath", help=helpText)
+
+    @classmethod
+    def addNameOption(cls, parser, objectType):
+        parser.add_argument(
+            "-n", "--name", default=None,
+            help="The name of the {}".format(objectType))
+
+    @classmethod
+    def addRnaQuantificationNameArgument(cls, subparser):
+        subparser.add_argument(
+            "rnaQuantificationName",
+            help="the name of the RNA Quantification")
+
+    @classmethod
+    def getParser(cls):
+        parser = createArgumentParser(
+            "GA4GH data repository management tool")
+        subparsers = parser.add_subparsers(title='subcommands',)
+        addVersionArgument(parser)
+
+        initParser = addSubparser(
+            subparsers, "init", "Initialize a data repository")
+        initParser.set_defaults(runner="init")
+        cls.addRepoArgument(initParser)
+        cls.addForceOption(initParser)
+
+        verifyParser = addSubparser(
+            subparsers, "verify",
+            "Verifies the repository by examing all data files")
+        verifyParser.set_defaults(runner="verify")
+        cls.addRepoArgument(verifyParser)
+
+        listParser = addSubparser(
+            subparsers, "list", "List the contents of the repo")
+        listParser.set_defaults(runner="list")
+        cls.addRepoArgument(listParser)
+
+        addDatasetParser = addSubparser(
+            subparsers, "add-dataset", "Add a dataset to the data repo")
+        addDatasetParser.set_defaults(runner="addDataset")
+        cls.addRepoArgument(addDatasetParser)
+        cls.addDatasetNameArgument(addDatasetParser)
+        cls.addDescriptionOption(addDatasetParser, "dataset")
+
+        removeDatasetParser = addSubparser(
+            subparsers, "remove-dataset",
+            "Remove a dataset from the data repo")
+        removeDatasetParser.set_defaults(runner="removeDataset")
+        cls.addRepoArgument(removeDatasetParser)
+        cls.addDatasetNameArgument(removeDatasetParser)
+        cls.addForceOption(removeDatasetParser)
+
+        objectType = "reference set"
+        addReferenceSetParser = addSubparser(
+            subparsers, "add-referenceset",
+            "Add a reference set to the data repo")
+        addReferenceSetParser.set_defaults(runner="addReferenceSet")
+        cls.addRepoArgument(addReferenceSetParser)
+        cls.addFilePathArgument(
+            addReferenceSetParser,
+            "The path of the FASTA file to use as a reference set. This "
+            "file must be bgzipped and indexed.")
+        cls.addRelativePathOption(addReferenceSetParser)
+        cls.addNameOption(addReferenceSetParser, objectType)
+        cls.addDescriptionOption(addReferenceSetParser, objectType)
+        addReferenceSetParser.add_argument(
+            "--ncbiTaxonId", default=None, help="The NCBI Taxon Id")
+        addReferenceSetParser.add_argument(
+            "--isDerived", default=False, type=bool,
+            help="Indicates if this reference set is derived from another")
+        addReferenceSetParser.add_argument(
+            "--assemblyId", default=None,
+            help="The assembly id")
+        addReferenceSetParser.add_argument(
+            "--sourceAccessions", default=None,
+            help="The source accessions (pass as comma-separated list)")
+        addReferenceSetParser.add_argument(
+            "--sourceUri", default=None,
+            help="The source URI")
+
+        removeReferenceSetParser = addSubparser(
+            subparsers, "remove-referenceset",
+            "Remove a reference set from the repo")
+        removeReferenceSetParser.set_defaults(runner="removeReferenceSet")
+        cls.addRepoArgument(removeReferenceSetParser)
+        removeReferenceSetParser.add_argument(
+            "referenceSetName",
+            help="the name of the reference set")
+        cls.addForceOption(removeReferenceSetParser)
+
+        objectType = "ReadGroupSet"
+        addReadGroupSetParser = addSubparser(
+            subparsers, "add-readgroupset",
+            "Add a read group set to the data repo")
+        addReadGroupSetParser.set_defaults(runner="addReadGroupSet")
+        cls.addRepoArgument(addReadGroupSetParser)
+        cls.addDatasetNameArgument(addReadGroupSetParser)
+        cls.addNameOption(addReadGroupSetParser, objectType)
+        cls.addReferenceSetNameOption(addReadGroupSetParser, "ReadGroupSet")
+        cls.addRelativePathOption(addReadGroupSetParser)
+        addReadGroupSetParser.add_argument(
+            "dataFile",
+            help="The file path or URL of the BAM file for this ReadGroupSet")
+        addReadGroupSetParser.add_argument(
+            "-I", "--indexFile", default=None,
+            help=(
+                "The file path of the BAM index for this ReadGroupSet. "
+                "If the dataFile argument is a local file, this will "
+                "be automatically inferred by appending '.bai' to the "
+                "file name. If the dataFile is a remote URL the path to "
+                "a local file containing the BAM index must be provided"))
+
+        addOntologyParser = addSubparser(
+            subparsers, "add-ontology",
+            "Adds an ontology in OBO format to the repo. Currently, "
+            "a sequence ontology (SO) instance is required to translate "
+            "ontology term names held in annotations to ontology IDs. "
+            "Sequence ontology files can be found at "
+            "https://github.com/The-Sequence-Ontology/SO-Ontologies")
+        addOntologyParser.set_defaults(runner="addOntology")
+        cls.addRepoArgument(addOntologyParser)
+        cls.addFilePathArgument(
+            addOntologyParser,
+            "The path of the OBO file defining this ontology.")
+        cls.addRelativePathOption(addOntologyParser)
+        cls.addNameOption(addOntologyParser, "ontology")
+
+        removeOntologyParser = addSubparser(
+            subparsers, "remove-ontology",
+            "Remove an ontology from the repo")
+        removeOntologyParser.set_defaults(runner="removeOntology")
+        cls.addRepoArgument(removeOntologyParser)
+        cls.addOntologyNameArgument(removeOntologyParser)
+        cls.addForceOption(removeOntologyParser)
+
+        removeReadGroupSetParser = addSubparser(
+            subparsers, "remove-readgroupset",
+            "Remove a read group set from the repo")
+        removeReadGroupSetParser.set_defaults(runner="removeReadGroupSet")
+        cls.addRepoArgument(removeReadGroupSetParser)
+        cls.addDatasetNameArgument(removeReadGroupSetParser)
+        cls.addReadGroupSetNameArgument(removeReadGroupSetParser)
+        cls.addForceOption(removeReadGroupSetParser)
+
+        objectType = "VariantSet"
+        addVariantSetParser = addSubparser(
+            subparsers, "add-variantset",
+            "Add a variant set to the data repo based on one or "
+            "more VCF files. ")
+        addVariantSetParser.set_defaults(runner="addVariantSet")
+        cls.addRepoArgument(addVariantSetParser)
+        cls.addDatasetNameArgument(addVariantSetParser)
+        cls.addRelativePathOption(addVariantSetParser)
+        addVariantSetParser.add_argument(
+            "dataFiles", nargs="+",
+            help=(
+                "The VCF/BCF files representing the new VariantSet. "
+                "These may be specified either one or more paths "
+                "to local files or remote URLS, or as a path to "
+                "a local directory containing VCF files. Either "
+                "a single directory argument may be passed or a "
+                "list of file paths/URLS, but not a mixture of "
+                "directories and paths.")
+            )
+        addVariantSetParser.add_argument(
+            "-I", "--indexFiles", nargs="+", metavar="indexFiles",
+            help=(
+                "The index files for the VCF/BCF files provided in "
+                "the dataFiles argument. These must be provided in the "
+                "same order as the data files."))
+        cls.addNameOption(addVariantSetParser, objectType)
+        cls.addReferenceSetNameOption(addVariantSetParser, objectType)
+        cls.addSequenceOntologyNameOption(addVariantSetParser, objectType)
+        addVariantSetParser.add_argument(
+            "-a", "--addAnnotationSets", action="store_true",
+            help=(
+                "If the supplied VCF file contains annotations, create the "
+                "corresponding VariantAnnotationSet."))
+
+        removeVariantSetParser = addSubparser(
+            subparsers, "remove-variantset",
+            "Remove a variant set from the repo")
+        removeVariantSetParser.set_defaults(runner="removeVariantSet")
+        cls.addRepoArgument(removeVariantSetParser)
+        cls.addDatasetNameArgument(removeVariantSetParser)
+        cls.addVariantSetNameArgument(removeVariantSetParser)
+        cls.addForceOption(removeVariantSetParser)
+
+        addFeatureSetParser = addSubparser(
+            subparsers, "add-featureset", "Add a feature set to the data repo")
+        addFeatureSetParser.set_defaults(runner="addFeatureSet")
+        cls.addRepoArgument(addFeatureSetParser)
+        cls.addDatasetNameArgument(addFeatureSetParser)
+        cls.addRelativePathOption(addFeatureSetParser)
+        cls.addFilePathArgument(
+            addFeatureSetParser,
+            "The path to the converted SQLite database containing Feature "
+            "data")
+        cls.addReferenceSetNameOption(addFeatureSetParser, "feature set")
+        cls.addSequenceOntologyNameOption(addFeatureSetParser, "feature set")
+
+        removeFeatureSetParser = addSubparser(
+            subparsers, "remove-featureset",
+            "Remove a feature set from the repo")
+        removeFeatureSetParser.set_defaults(runner="removeFeatureSet")
+        cls.addRepoArgument(removeFeatureSetParser)
+        cls.addDatasetNameArgument(removeFeatureSetParser)
+        cls.addFeatureSetNameArgument(removeFeatureSetParser)
+        cls.addForceOption(removeFeatureSetParser)
+
+        addBioSampleParser = addSubparser(
+            subparsers, "add-biosample", "Add a BioSample to the dataset")
+        addBioSampleParser.set_defaults(runner="addBioSample")
+        cls.addRepoArgument(addBioSampleParser)
+        cls.addDatasetNameArgument(addBioSampleParser)
+        cls.addBioSampleNameArgument(addBioSampleParser)
+        cls.addBioSampleArgument(addBioSampleParser)
+
+        removeBioSampleParser = addSubparser(
+            subparsers, "remove-biosample",
+            "Remove a BioSample from the repo")
+        removeBioSampleParser.set_defaults(runner="removeBioSample")
+        cls.addRepoArgument(removeBioSampleParser)
+        cls.addDatasetNameArgument(removeBioSampleParser)
+        cls.addBioSampleNameArgument(removeBioSampleParser)
+        cls.addForceOption(removeBioSampleParser)
+
+        addIndividualParser = addSubparser(
+            subparsers, "add-individual", "Add an Individual to the dataset")
+        addIndividualParser.set_defaults(runner="addIndividual")
+        cls.addRepoArgument(addIndividualParser)
+        cls.addDatasetNameArgument(addIndividualParser)
+        cls.addIndividualNameArgument(addIndividualParser)
+        cls.addIndividualArgument(addIndividualParser)
+
+        removeIndividualParser = addSubparser(
+            subparsers, "remove-individual",
+            "Remove an Individual from the repo")
+        removeIndividualParser.set_defaults(runner="removeIndividual")
+        cls.addRepoArgument(removeIndividualParser)
+        cls.addDatasetNameArgument(removeIndividualParser)
+        cls.addIndividualNameArgument(removeIndividualParser)
+        cls.addForceOption(removeIndividualParser)
+
+        objectType = "RnaQuantificationSet"
+        addRnaQuantificationSetParser = addSubparser(
+            subparsers, "add-rnaquantificationset",
+            "Add an RNA quantification set to the data repo")
+        addRnaQuantificationSetParser.set_defaults(
+            runner="addRnaQuantificationSet")
+        cls.addRepoArgument(addRnaQuantificationSetParser)
+        cls.addDatasetNameArgument(addRnaQuantificationSetParser)
+        cls.addFilePathArgument(
+            addRnaQuantificationSetParser,
+            "The path to the converted SQLite database containing RNA data")
+        cls.addReferenceSetNameOption(
+            addRnaQuantificationSetParser, objectType)
+        cls.addNameOption(addRnaQuantificationSetParser, objectType)
+
+        removeRnaQuantificationSetParser = addSubparser(
+            subparsers, "remove-rnaquantificationset",
+            "Remove an RNA quantification set from the repo")
+        removeRnaQuantificationSetParser.set_defaults(
+            runner="removeRnaQuantificationSet")
+        cls.addRepoArgument(removeRnaQuantificationSetParser)
+        cls.addDatasetNameArgument(removeRnaQuantificationSetParser)
+        cls.addRnaQuantificationNameArgument(removeRnaQuantificationSetParser)
+        cls.addForceOption(removeRnaQuantificationSetParser)
+
+        return parser
+
+    @classmethod
+    def runCommand(cls, args):
+        parser = cls.getParser()
+        parsedArgs = parser.parse_args(args)
+        if "runner" not in parsedArgs:
+            parser.print_help()
+        manager = RepoManager(parsedArgs)
+        runMethod = getattr(manager, parsedArgs.runner)
+        runMethod()
 
 
-def addRepoArgument(subparser):
-    subparser.add_argument(
-        "repoPath", help="the file path of the data repository")
+def getRepoManagerParser():
+    """
+    Used by sphinx.argparse.
+    """
+    return RepoManager.getParser()
 
 
-def addSkipConsistencyCheckArgument(subparser):
-    subparser.add_argument(
-        "-s", "--skipConsistencyCheck", action='store_true', default=False,
-        help="skip the data repo consistency check")
-
-
-def addForceArgument(subparser):
-    subparser.add_argument(
-        "-f", "--force", action='store_true',
-        default=False, help="do not prompt for confirmation")
-
-
-def addDatasetNameArgument(subparser):
-    subparser.add_argument(
-        "datasetName", help="the name of the dataset to create/modify")
-
-
-def addOntologyNameArgument(subparser):
-    subparser.add_argument(
-        "ontologyMapName",
-        help="the name of the ontology map to create/modify")
-
-
-def addReadGroupSetNameArgument(subparser):
-    subparser.add_argument(
-        "readGroupSetName",
-        help="the name of the read group set")
-
-
-def addVariantSetNameArgument(subparser):
-    subparser.add_argument(
-        "variantSetName",
-        help="the name of the variant set")
-
-
-def addFeatureSetNameArgument(subparser):
-    subparser.add_argument(
-        "featureSetName",
-        help="the name of the variant set")
-
-
-def addFilePathArgument(subparser):
-    subparser.add_argument(
-        "filePath", help="the path of the file to be moved into the repo")
-
-
-def addMoveModeArgument(subparser):
-    subparser.add_argument(
-        "--moveMode",
-        help="move, copy or link the target file (default link)",
-        choices=['move', 'copy', 'link'],
-        default='link')
-
-
-def addReferenceSetMetadataArguments(subparser):
-    subparser.add_argument(
-        "--description",
-        help="description of the reference set",
-        default="TODO")
-
-
-def getRepoParser():
-    parser = createArgumentParser(
-        "GA4GH data repository management tool")
-    subparsers = parser.add_subparsers(title='subcommands',)
-    parser.add_argument(
-        "--loud", default=False, action="store_true",
-        help="propagate exceptions from RepoManager")
-    addVersionArgument(parser)
-
-    initParser = addSubparser(
-        subparsers, "init", "Initialize a data repository")
-    initParser.set_defaults(runner=InitRunner)
-    addRepoArgument(initParser)
-
-    checkParser = addSubparser(
-        subparsers, "check", "Check to see if repo is well-formed")
-    checkParser.set_defaults(runner=CheckRunner)
-    addRepoArgument(checkParser)
-    addSkipConsistencyCheckArgument(checkParser)
-
-    listParser = addSubparser(
-        subparsers, "list", "List the contents of the repo")
-    listParser.set_defaults(runner=ListRunner)
-    addRepoArgument(listParser)
-
-    destroyParser = addSubparser(
-        subparsers, "destroy", "Destroy the repo")
-    destroyParser.set_defaults(runner=DestroyRunner)
-    addRepoArgument(destroyParser)
-    addForceArgument(destroyParser)
-
-    addDatasetParser = addSubparser(
-        subparsers, "add-dataset", "Add a dataset to the data repo")
-    addDatasetParser.set_defaults(runner=AddDatasetRunner)
-    addRepoArgument(addDatasetParser)
-    addDatasetNameArgument(addDatasetParser)
-
-    removeDatasetParser = addSubparser(
-        subparsers, "remove-dataset",
-        "Remove a dataset from the data repo")
-    removeDatasetParser.set_defaults(runner=RemoveDatasetRunner)
-    addRepoArgument(removeDatasetParser)
-    addDatasetNameArgument(removeDatasetParser)
-    addForceArgument(removeDatasetParser)
-
-    addReferenceSetParser = addSubparser(
-        subparsers, "add-referenceset",
-        "Add a reference set to the data repo")
-    addReferenceSetParser.set_defaults(runner=AddReferenceSetRunner)
-    addRepoArgument(addReferenceSetParser)
-    addFilePathArgument(addReferenceSetParser)
-    addMoveModeArgument(addReferenceSetParser)
-    addReferenceSetMetadataArguments(addReferenceSetParser)
-
-    removeReferenceSetParser = addSubparser(
-        subparsers, "remove-referenceset",
-        "Remove a reference set from the repo")
-    removeReferenceSetParser.set_defaults(runner=RemoveReferenceSetRunner)
-    addRepoArgument(removeReferenceSetParser)
-    removeReferenceSetParser.add_argument(
-        "referenceSetName",
-        help="the name of the reference set")
-    addForceArgument(removeReferenceSetParser)
-
-    addReadGroupSetParser = addSubparser(
-        subparsers, "add-readgroupset",
-        "Add a read group set to the data repo")
-    addReadGroupSetParser.set_defaults(runner=AddReadGroupSetRunner)
-    addRepoArgument(addReadGroupSetParser)
-    addDatasetNameArgument(addReadGroupSetParser)
-    addFilePathArgument(addReadGroupSetParser)
-    addMoveModeArgument(addReadGroupSetParser)
-
-    addOntologyMapParser = addSubparser(
-        subparsers, "add-ontologymap",
-        "Add an ontology map to the repo")
-    addOntologyMapParser.set_defaults(runner=AddOntologyMapRunner)
-    addRepoArgument(addOntologyMapParser)
-    addFilePathArgument(addOntologyMapParser)
-    addMoveModeArgument(addOntologyMapParser)
-
-    removeOntologyMapParser = addSubparser(
-        subparsers, "remove-ontologymap",
-        "Remove an ontology map from the repo")
-    removeOntologyMapParser.set_defaults(runner=RemoveOntologyMapRunner)
-    addRepoArgument(removeOntologyMapParser)
-    addOntologyNameArgument(removeOntologyMapParser)
-    addForceArgument(removeOntologyMapParser)
-
-    removeReadGroupSetParser = addSubparser(
-        subparsers, "remove-readgroupset",
-        "Remove a read group set from the repo")
-    removeReadGroupSetParser.set_defaults(runner=RemoveReadGroupSetRunner)
-    addRepoArgument(removeReadGroupSetParser)
-    addDatasetNameArgument(removeReadGroupSetParser)
-    addReadGroupSetNameArgument(removeReadGroupSetParser)
-    addForceArgument(removeReadGroupSetParser)
-
-    addVariantSetParser = addSubparser(
-        subparsers, "add-variantset", "Add a variant set to the data repo")
-    addVariantSetParser.set_defaults(runner=AddVariantSetRunner)
-    addRepoArgument(addVariantSetParser)
-    addDatasetNameArgument(addVariantSetParser)
-    addFilePathArgument(addVariantSetParser)
-    addMoveModeArgument(addVariantSetParser)
-
-    removeVariantSetParser = addSubparser(
-        subparsers, "remove-variantset",
-        "Remove a variant set from the repo")
-    removeVariantSetParser.set_defaults(runner=RemoveVariantSetRunner)
-    addRepoArgument(removeVariantSetParser)
-    addDatasetNameArgument(removeVariantSetParser)
-    addVariantSetNameArgument(removeVariantSetParser)
-    addForceArgument(removeVariantSetParser)
-
-    addFeatureSetParser = addSubparser(
-        subparsers, "add-featureset", "Add a feature set to the data repo")
-    addFeatureSetParser.set_defaults(runner=AddFeatureSetRunner)
-    addRepoArgument(addFeatureSetParser)
-    addDatasetNameArgument(addFeatureSetParser)
-    addFilePathArgument(addFeatureSetParser)
-    addMoveModeArgument(addFeatureSetParser)
-
-    removeFeatureSetParser = addSubparser(
-        subparsers, "remove-featureset",
-        "Remove a feature set from the repo")
-    removeFeatureSetParser.set_defaults(runner=RemoveFeatureSetRunner)
-    addRepoArgument(removeFeatureSetParser)
-    addDatasetNameArgument(removeFeatureSetParser)
-    addFeatureSetNameArgument(removeFeatureSetParser)
-    addForceArgument(removeFeatureSetParser)
-
-    return parser
+def repoExitError(message):
+    """
+    Exits the repo manager with error status.
+    """
+    wrapper = textwrap.TextWrapper(
+        break_on_hyphens=False, break_long_words=False)
+    formatted = wrapper.fill("{}: error: {}".format(sys.argv[0], message))
+    sys.exit(formatted)
 
 
 def repo_main(args=None):
-    parser = getRepoParser()
-    parsedArgs = parser.parse_args(args)
-    if "runner" not in parsedArgs:
-        parser.print_help()
-    else:
-        runner = parsedArgs.runner(parsedArgs)
-        try:
-            runner.run()
-        except exceptions.RepoManagerException as exception:
-            print(exception.message)
-            if parsedArgs.loud:
-                raise
+    try:
+        RepoManager.runCommand(args)
+    except exceptions.RepoManagerException as exception:
+        # These are exceptions that happen throughout the CLI, and are
+        # used to communicate back to the user
+        repoExitError(str(exception))
+    except exceptions.NotFoundException as exception:
+        # We expect NotFoundExceptions to occur when we're looking for
+        # datasets, readGroupsets, etc.
+        repoExitError(str(exception))
+    except exceptions.DataException as exception:
+        # We expect DataExceptions to occur when a file open fails,
+        # a URL cannot be reached, etc.
+        repoExitError(str(exception))
+    except Exception as exception:
+        # Uncaught exception: this is a bug
+        message = """
+An internal error has occurred.  Please file a bug report at
+https://github.com/ga4gh/server/issues
+with all the relevant details, and the following stack trace.
+"""
+        print("{}: error:".format(sys.argv[0]), file=sys.stderr)
+        print(message, file=sys.stderr)
+        traceback.print_exception(*sys.exc_info())
+        sys.exit(1)
