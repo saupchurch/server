@@ -1461,54 +1461,6 @@ def addReadsSearchParserArguments(parser):
         help="The referenceId to search over")
 
 
-def addRnaQuantificationSearchParserArguments(subparsers):
-    parser = subparsers.add_parser(
-        "rnaquantification-search",
-        description="Search for rna quantification",
-        help="Search for rna quantification")
-    parser.set_defaults(runner=SearchRnaQuantificationRunner)
-    addUrlArgument(parser)
-    addPageSizeArgument(parser)
-    parser.add_argument(
-        "--rnaQuantificationId", default=None,
-        help="The rnaQuantificationId to search over")
-
-
-def addExpressionLevelSearchParserArguments(subparsers):
-    parser = subparsers.add_parser(
-        "expressionlevel-search",
-        description="Search for feature expression",
-        help="Search for feature expression")
-    parser.set_defaults(runner=SearchExpressionLevelRunner)
-    addUrlArgument(parser)
-    addPageSizeArgument(parser)
-    parser.add_argument(
-        "--expressionLevelId", default=None,
-        help="The expression level Id to search over")
-    parser.add_argument(
-        "--rnaQuantificationId", default=None,
-        help="The RNA Quantification Id to search over")
-    parser.add_argument(
-        "--featureGroupId", default=None,
-        help="The feature group Id to search over")
-
-
-def addFeatureGroupSearchParserArguments(subparsers):
-    parser = subparsers.add_parser(
-        "featuregroup-search",
-        description="Search for feature group",
-        help="Search for feature group")
-    parser.set_defaults(runner=SearchFeatureGroupRunner)
-    addUrlArgument(parser)
-    addPageSizeArgument(parser)
-    parser.add_argument(
-        "--featureGroupId", default=None,
-        help="The feature group Id to search over")
-    parser.add_argument(
-        "--threshold", default=None, type=float,
-        help="The minimum value for expression results to report.")
-
-
 def addReferenceSetsGetParser(subparsers):
     parser = addSubparser(
         subparsers, "referencesets-get", "Get a referenceset")
