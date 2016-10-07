@@ -43,7 +43,7 @@ file path. This is the first command that must be issued
 when creating a new GA4GH repository.
 
 .. argparse::
-    :module: ga4gh.cli
+    :module: ga4gh.cli.repomanager
     :func: getRepoManagerParser
     :prog: ga4gh_repo
     :path: init
@@ -69,7 +69,7 @@ understand the structure of the repository that they are managing.
    of this command should improve considerably in the near future.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: list
@@ -99,7 +99,7 @@ well in their repository.
    of this command should improve considerably in the near future.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: verify
@@ -121,7 +121,7 @@ of ReadGroupSets, VariantSets, VariantAnnotationSets and FeatureSets. Each
 dataset has a name, which is used to identify it in the repository manager.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-dataset
@@ -149,7 +149,7 @@ number of metadata values (.e.g. ``ncbiTaxonId``) which can be set
 using command line options.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-referenceset
@@ -171,11 +171,11 @@ Adds a reference set used in the 1000 Genomes project using the name
 add-biosample
 ++++++++++++++++
 
-Adds a new biosample to the repository. The biosample argument is 
+Adds a new biosample to the repository. The biosample argument is
 a JSON document according to the GA4GH JSON schema.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-biosample
@@ -194,11 +194,11 @@ Adds the biosample named HG00096 to the repository with the individual ID
 add-individual
 ++++++++++++++++
 
-Adds a new individual to the repository. The individual argument is 
+Adds a new individual to the repository. The individual argument is
 a JSON document following the GA4GH JSON schema.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-individual
@@ -224,7 +224,7 @@ to ontology IDs. Sequence ontology definitions can be downloaded from
 the `Sequence Ontology site <https://github.com/The-Sequence-Ontology/SO-Ontologies>`_.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-ontology
@@ -254,7 +254,7 @@ provided using the ``-I`` option.
 .. todo:: Document adding VariantAnnotationSets using the -a option.
 
 .. argparse::
-    :module: ga4gh.cli
+    :module: ga4gh.cli.repomanager
     :func: getRepoManagerParser
     :prog: ga4gh_repo
     :path: add-variantset
@@ -324,7 +324,7 @@ then the readgroup set will be associated with it automatically. If it does not
 name of the reference set using the ``--referenceSetName`` option.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: add-readgroupset
@@ -365,6 +365,91 @@ Adds a new readgroups set based on a 1000 genomes BAM directly from the NCBI
 FTP server. Because this readgroup set uses a remote FTP URL, we must specify
 the location of the ``.bai`` index file on the local file system.
 
++++++++++++++++++++++++++
+init-rnaquantificationset
++++++++++++++++++++++++++
+
+Initializes a rnaquantification set.
+
+.. argparse::
+   :module: ga4gh.cli.repomanager
+   :func: getRepoManagerParser
+   :prog: ga4gh_repo
+   :path: init-rnaquantificationset
+   :nodefault:
+
+**Examples:**
+
+.. code-block:: bash
+
+    $ ga4gh_repo init-rnaquantificationset repo.db rnaseq.db
+
+Initializes the RNA Quantification Set with the filename rnaseq.db.
+
+++++++++++++++++++++++++
+add-rnaquantificationset
+++++++++++++++++++++++++
+
+Adds a rnaquantification set to a named dataset in a repository.
+Rnaquantification sets are currently derived from a single sqlite database,
+which is stored locally.
+
+Each rnaquantification set must be associated with the reference set that it is
+aligned to.  The sqlite database contains the rnaquantifications which are
+members of the rnaquantification set as well as the feature quantifications for
+each of those rnaquantifications.
+
+.. todo:: Database schema diagram.
+
+A helper script ``scripts/rnaseq2ga.py`` is included to create the
+rnaquantification database. Quantifications are specified in a tab delimited
+control file with columns:
+rna_quant_name    filename    type    feature_set_name    read_group_set_name    description    programs
+
+Each line corresponds to one rnaquantification in the set.  The script supports
+the following quantification types: Cufflinks, kallisto and RSEM.
+
+.. argparse::
+   :module: ga4gh.cli.repomanager
+   :func: getRepoManagerParser
+   :prog: ga4gh_repo
+   :path: add-rnaquantificationset
+   :nodefault:
+
+**Examples:**
+
+.. code-block:: bash
+
+    $ ga4gh_repo add-rnaquantificationset registry.db 1kg \
+        path/to/expression_values_database.db -R GRCh37-subset
+
+Adds a new rnaquantification set for a feature expression database stored on
+the local file system. The name of the rnaquantification set is automatically
+derived from the file name.
+
++++++++++++++++++++++++++++
+add-phenotypeassociationset
++++++++++++++++++++++++++++
+
+Adds an rdf object store.  The cancer genome database
+Clinical Genomics Knowledge Base http://nif-crawler.neuinfo.org/monarch/ttl/cgd.ttl,
+published by the Monarch project, is the supported format for Evidence.
+
+.. argparse::
+   :module: ga4gh.cli.repomanager
+   :func: getRepoManagerParser
+   :prog: ga4gh_repo
+   :path: add-phenotypeassociationset
+   :nodefault:
+
+
+Examples:
+
+.. code-block:: bash
+
+    $ ga4gh_repo add-phenotypeassociationset registry.db dataset1 /monarch/ttl/cgd.ttl -n cgd
+
+
 +++++++++++++++
 remove-dataset
 +++++++++++++++
@@ -373,7 +458,7 @@ Removes a dataset from the repository and recursively removes all
 objects (ReadGroupSets, VariantSets, etc) within this dataset.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-dataset
@@ -397,7 +482,7 @@ to remove a reference set that is referenced by other objects in the
 repository will result in an error.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-referenceset
@@ -419,7 +504,7 @@ remove-biosample
 Removes a biosample from the repository.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-biosample
@@ -431,7 +516,7 @@ Removes a biosample from the repository.
 
     $ ga4gh_repo remove-biosample registry.db dataset1 HG00096
 
-Deletes the biosample with name ``HG00096`` in the dataset 
+Deletes the biosample with name ``HG00096`` in the dataset
 ``dataset1`` from the repository represented by ``registry.db``
 
 +++++++++++++++++
@@ -441,7 +526,7 @@ remove-individual
 Removes an individual from the repository.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-individual
@@ -453,7 +538,7 @@ Removes an individual from the repository.
 
     $ ga4gh_repo remove-individual registry.db dataset1 HG00096
 
-Deletes the individual with name ``HG00096`` in the dataset 
+Deletes the individual with name ``HG00096`` in the dataset
 ``dataset1`` from the repository represented by ``registry.db``
 
 ++++++++++++++++++++
@@ -465,7 +550,7 @@ to remove an ontology that is referenced by other objects in the
 repository will result in an error.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-ontology
@@ -488,7 +573,7 @@ Removes a variant set from the repository. This also deletes all
 associated call sets and variant annotation sets from the repository.
 
 .. argparse::
-    :module: ga4gh.cli
+    :module: ga4gh.cli.repomanager
     :func: getRepoManagerParser
     :prog: ga4gh_repo
     :path: remove-variantset
@@ -510,7 +595,7 @@ remove-readgroupset
 Removes a read group set from the repository.
 
 .. argparse::
-   :module: ga4gh.cli
+   :module: ga4gh.cli.repomanager
    :func: getRepoManagerParser
    :prog: ga4gh_repo
    :path: remove-readgroupset
@@ -524,6 +609,47 @@ Removes a read group set from the repository.
 
 Deletes the readgroup set named ``HG00114`` from the dataset named
 ``dataset1`` from the repository represented by ``registry.db``.
+
++++++++++++++++++++++++++++
+remove-rnaquantificationset
++++++++++++++++++++++++++++
+
+Removes a rna quantification set from the repository.
+
+.. argparse::
+   :module: ga4gh.cli.repomanager
+   :func: getRepoManagerParser
+   :prog: ga4gh_repo
+   :path: remove-rnaquantificationset
+   :nodefault:
+
+**Examples:**
+
+.. code-block:: bash
+
+    $ ga4gh_repo remove-rnaquantificationset registry.db dataset1 ENCFF305LZB
+
+Deletes the rnaquantification set named ``ENCFF305LZB`` from the dataset named
+``dataset1`` from the repository represented by ``registry.db``.
+
+++++++++++++++++++++++++++++++
+remove-phenotypeassociationset
+++++++++++++++++++++++++++++++
+
+Removes an rdf object store.
+
+.. argparse::
+   :module: ga4gh.cli.repomanager
+   :func: getRepoManagerParser
+   :prog: ga4gh_repo
+   :path: remove-phenotypeassociationset
+   :nodefault:
+
+Examples:
+
+.. code-block:: bash
+
+    $ ga4gh_repo remove-phenotypeassociationset registry.db dataset1  cgd
 
 ------------------
 Configuration file
@@ -582,11 +708,6 @@ REQUEST_VALIDATION
     Set this to True to strictly validate all incoming requests to ensure that
     they conform to the protocol. This may result in clients with poor standards
     compliance receiving errors rather than the expected results.
-
-RESPONSE_VALIDATION
-    Set this to True to strictly validate all outgoing responses to ensure
-    that they conform to the protocol. This should only be used for development
-    purposes.
 
 LANDING_MESSAGE_HTML
     The server provides a simple landing page at its root. By setting this

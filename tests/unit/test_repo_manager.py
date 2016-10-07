@@ -13,7 +13,7 @@ import unittest
 
 import ga4gh.exceptions as exceptions
 import ga4gh.datarepo as datarepo
-import ga4gh.cli as cli
+import ga4gh.cli.repomanager as cli_repomanager
 import ga4gh.datamodel as datamodel
 import tests.paths as paths
 
@@ -24,31 +24,37 @@ class TestGetNameFromPath(unittest.TestCase):
     paths.
     """
     def testError(self):
-        self.assertRaises(ValueError, cli.getNameFromPath, "")
+        self.assertRaises(ValueError, cli_repomanager.getNameFromPath, "")
 
     def testLocalDirectory(self):
-        self.assertEqual(cli.getNameFromPath("no_extension"), "no_extension")
-        self.assertEqual(cli.getNameFromPath("x.y"), "x")
-        self.assertEqual(cli.getNameFromPath("x.y.z"), "x")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("no_extension"), "no_extension")
+        self.assertEqual(cli_repomanager.getNameFromPath("x.y"), "x")
+        self.assertEqual(cli_repomanager.getNameFromPath("x.y.z"), "x")
 
     def testFullPaths(self):
-        self.assertEqual(cli.getNameFromPath("/no_ext"), "no_ext")
-        self.assertEqual(cli.getNameFromPath("/x.y"), "x")
-        self.assertEqual(cli.getNameFromPath("/x.y.z"), "x")
-        self.assertEqual(cli.getNameFromPath("/a/no_ext"), "no_ext")
-        self.assertEqual(cli.getNameFromPath("/a/x.y"), "x")
-        self.assertEqual(cli.getNameFromPath("/a/x.y.z"), "x")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("/no_ext"), "no_ext")
+        self.assertEqual(cli_repomanager.getNameFromPath("/x.y"), "x")
+        self.assertEqual(cli_repomanager.getNameFromPath("/x.y.z"), "x")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("/a/no_ext"), "no_ext")
+        self.assertEqual(cli_repomanager.getNameFromPath("/a/x.y"), "x")
+        self.assertEqual(cli_repomanager.getNameFromPath("/a/x.y.z"), "x")
 
     def testUrls(self):
-        self.assertEqual(cli.getNameFromPath("file:///no_ext"), "no_ext")
-        self.assertEqual(cli.getNameFromPath("http://example.com/x.y"), "x")
-        self.assertEqual(cli.getNameFromPath("ftp://x.y.z"), "x")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("file:///no_ext"), "no_ext")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("http://example.com/x.y"), "x")
+        self.assertEqual(
+            cli_repomanager.getNameFromPath("ftp://x.y.z"), "x")
 
     def testDirectoryName(self):
-        self.assertEqual(cli.getNameFromPath("/a/xy"), "xy")
-        self.assertEqual(cli.getNameFromPath("/a/xy/"), "xy")
-        self.assertEqual(cli.getNameFromPath("xy/"), "xy")
-        self.assertEqual(cli.getNameFromPath("xy"), "xy")
+        self.assertEqual(cli_repomanager.getNameFromPath("/a/xy"), "xy")
+        self.assertEqual(cli_repomanager.getNameFromPath("/a/xy/"), "xy")
+        self.assertEqual(cli_repomanager.getNameFromPath("xy/"), "xy")
+        self.assertEqual(cli_repomanager.getNameFromPath("xy"), "xy")
 
 
 class AbstractRepoManagerTest(unittest.TestCase):
@@ -60,7 +66,7 @@ class AbstractRepoManagerTest(unittest.TestCase):
         os.unlink(self._repoPath)
 
     def runCommand(self, cmd):
-        cli.RepoManager.runCommand(cmd.split())
+        cli_repomanager.RepoManager.runCommand(cmd.split())
 
     def tearDown(self):
         os.unlink(self._repoPath)
@@ -74,7 +80,6 @@ class AbstractRepoManagerTest(unittest.TestCase):
         self.runCommand("init {}".format(self._repoPath))
 
     def addOntology(self):
-        # Add the sequence ontology
         self._ontologyName = paths.ontologyName
         cmd = "add-ontology {} {}".format(self._repoPath, paths.ontologyPath)
         self.runCommand(cmd)
@@ -120,6 +125,17 @@ class AbstractRepoManagerTest(unittest.TestCase):
             "--ontologyName={}").format(
             self._repoPath, self._datasetName, featuresPath,
             self._referenceSetName, self._ontologyName)
+        self.runCommand(cmd)
+
+    def addPhenotypeAssociationSet(self):
+        phenotypeAssociationSetPath = paths.phenotypeAssociationSetPath
+        self._phenotypeAssociationSetName = "test_phenotypeAssociationSet"
+        cmd = (
+            "add-phenotypeassociationset {} {} {} -n {}").format(
+                self._repoPath,
+                self._datasetName,
+                phenotypeAssociationSetPath,
+                self._phenotypeAssociationSetName)
         self.runCommand(cmd)
 
     def getFeatureSet(self):
@@ -225,6 +241,59 @@ class TestAddDataset(AbstractRepoManagerTest):
         self.runCommand(cmd)
         self.assertRaises(
             exceptions.DuplicateNameException, self.runCommand, cmd)
+
+
+class TestAddPhenotypeAssociationSet(AbstractRepoManagerTest):
+
+    def setUp(self):
+        super(TestAddPhenotypeAssociationSet, self).setUp()
+        self.init()
+
+    def testDefaults(self):
+        self.addDataset()
+        self.addPhenotypeAssociationSet()
+
+    def testSameName(self):
+        self.addDataset()
+        self.addPhenotypeAssociationSet()
+        with self.assertRaises(exceptions.DuplicateNameException):
+            self.addPhenotypeAssociationSet()
+
+
+class TestRemovePhenotypeAssociationSet(AbstractRepoManagerTest):
+
+    def setUp(self):
+        super(TestRemovePhenotypeAssociationSet, self).setUp()
+        self.init()
+
+    def _assertPhenotypeAssociationSetRemoved(self):
+        repo = self.readRepo()
+        dataset = repo.getDatasetByName(self._datasetName)
+        with self.assertRaises(
+                exceptions.PhenotypeAssociationSetNotFoundException):
+            dataset.getPhenotypeAssociationSetByName(
+                self._phenotypeAssociationSetName)
+
+    def _removePhenotypeAssociationSet(self):
+        cmdString = "remove-phenotypeassociationset {} {} {} -f"
+        self.runCommand(cmdString.format(
+            self._repoPath, self._datasetName,
+            self._phenotypeAssociationSetName))
+
+    def testDefaults(self):
+        self.addDataset()
+        self.addPhenotypeAssociationSet()
+        self._removePhenotypeAssociationSet()
+        self._assertPhenotypeAssociationSetRemoved()
+
+    def testDuplicateDelete(self):
+        self.addDataset()
+        self.addPhenotypeAssociationSet()
+        self._removePhenotypeAssociationSet()
+        self._assertPhenotypeAssociationSetRemoved()
+        with self.assertRaises(
+                exceptions.PhenotypeAssociationSetNotFoundException):
+            self._removePhenotypeAssociationSet()
 
 
 class TestAddReferenceSet(AbstractRepoManagerTest):

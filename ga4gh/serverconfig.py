@@ -18,7 +18,6 @@ class BaseConfig(object):
     MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2MB
     MAX_RESPONSE_LENGTH = 1024 * 1024  # 1MB
     REQUEST_VALIDATION = True
-    RESPONSE_VALIDATION = False
     DEFAULT_PAGE_SIZE = 100
     DATA_SOURCE = "empty://"
 
@@ -31,6 +30,8 @@ class BaseConfig(object):
     SIMULATED_BACKEND_NUM_REFERENCES_PER_REFERENCE_SET = 1
     SIMULATED_BACKEND_NUM_ALIGNMENTS_PER_READ_GROUP = 2
     SIMULATED_BACKEND_NUM_READ_GROUPS_PER_READ_GROUP_SET = 2
+    SIMULATED_BACKEND_NUM_PHENOTYPE_ASSOCIATIONS = 2
+    SIMULATED_BACKEND_NUM_PHENOTYPE_ASSOCIATION_SETS = 2
     SIMULATED_BACKEND_NUM_RNA_QUANTIFICATION_SETS = 2
     SIMULATED_BACKEND_NUM_EXPRESSION_LEVELS_PER_RNA_QUANT_SET = 2
 
@@ -39,11 +40,19 @@ class BaseConfig(object):
     LANDING_MESSAGE_HTML = "landing_message.html"
 
 
+class ComplianceConfig(BaseConfig):
+    """
+    Configuration used for compliance testing.
+    """
+    DATA_SOURCE = "ga4gh-compliance-data/registry.db"
+    DEBUG = True
+
+
 class DevelopmentConfig(BaseConfig):
     """
     Configuration used for development.
     """
-    DATA_SOURCE = "ga4gh-example-data/repo.db"
+    DATA_SOURCE = "ga4gh-example-data/registry.db"
     DEBUG = True
 
 
@@ -61,7 +70,6 @@ class SimulatedConfig(BaseConfig):
     DATA_SOURCE = "simulated://"
     DEBUG = True
     REQUEST_VALIDATION = True
-    RESPONSE_VALIDATION = True
 
 
 class ProductionConfig(BaseConfig):
@@ -91,7 +99,6 @@ class TestConfig(BaseConfig):
     """
     TESTING = True
     REQUEST_VALIDATION = True
-    RESPONSE_VALIDATION = True
 
 
 class TestOidcConfig(TestConfig):

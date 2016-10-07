@@ -10,7 +10,7 @@ import os
 import tempfile
 import unittest
 
-import ga4gh.cli as cli
+import ga4gh.cli.repomanager as cli_repomanager
 import tests.paths as paths
 
 import ga4gh.protocol as protocol
@@ -42,7 +42,7 @@ class RepoManagerEndToEndTest(unittest.TestCase):
 
     def _runCmd(self, cmd, *args):
         command = [cmd, self.repoFile] + list(args)
-        cli.repo_main(command)
+        cli_repomanager.repo_main(command)
 
     def testEndToEnd(self):
         self._runCmd("init")
@@ -75,9 +75,20 @@ class RepoManagerEndToEndTest(unittest.TestCase):
             "add-variantset", self.datasetName,
             paths.annotatedVcfPath, '-R', paths.referenceSetName,
             "-aO", paths.ontologyName, "-n", variantAnnotationSetName)
+        phenotypeAssociationSetName = "paSet"
+        self._runCmd(
+            "add-phenotypeassociationset",
+            self.datasetName,
+            paths.phenotypeAssociationSetPath,
+            "-n",
+            phenotypeAssociationSetName)
 
         self._runCmd("verify")
         self._runCmd("list")
+
+        self._runCmd(
+            "remove-phenotypeassociationset",
+            self.datasetName, phenotypeAssociationSetName, "-f")
         self._runCmd(
             "remove-variantset", self.datasetName, paths.variantSetName, "-f")
         self._runCmd(
@@ -100,9 +111,9 @@ class RepoManagerEndToEndTest(unittest.TestCase):
         datasetName = 'dataset1'
         self._runCmd("init")
         self._runCmd("add-dataset", datasetName)
-        with mock.patch('ga4gh.cli.getRawInput', lambda x: 'N'):
+        with mock.patch('ga4gh.cli.repomanager.getRawInput', lambda x: 'N'):
             self._runCmd("remove-dataset", datasetName)
-        with mock.patch('ga4gh.cli.getRawInput', lambda x: 'y'):
+        with mock.patch('ga4gh.cli.repomanager.getRawInput', lambda x: 'y'):
             self._runCmd("remove-dataset", datasetName)
             with self.assertRaises(SystemExit):
                 self._runCmd("remove-dataset", datasetName)

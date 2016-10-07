@@ -222,6 +222,14 @@ class VariantSetNotFoundException(NotFoundException):
             variantSetId)
 
 
+class PhenotypeAssociationSetNotFoundException(NotFoundException):
+    def __init__(self, paSetId):
+        self.message = (
+            "The requested PhenotypeAssociationSet '{}' "
+            "was not found".format(
+                paSetId))
+
+
 class BioSampleNotFoundException(NotFoundException):
     def __init__(self, bioSampleId):
         self.message = "The requested BioSample '{}' was not found".format(
@@ -648,21 +656,6 @@ class ServerError(RuntimeException):
     message = "Internal Server Error"
 
 
-class ResponseValidationFailureException(ServerError):
-    """
-    A validation of the response data failed
-    """
-    def __init__(self, jsonDict, requestClass):
-        validator = Validator(requestClass)
-        self.message = (
-            "Response '{}' is not a valid instance of {}. "
-            "Invalid fields: {} "
-            "Please file a bug report.".format(
-                jsonDict, requestClass,
-                validator.getInvalidFields(jsonDict)
-            ))
-
-
 #####################################################################
 #
 # Client exceptions
@@ -721,3 +714,12 @@ class MissingIndexException(RepoManagerException):
         msg = "An index file must be provided for remote file '{}'".format(
             dataUrl)
         super(MissingIndexException, self).__init__(msg)
+
+
+class UnsupportedFormatException(RepoManagerException):
+    """
+    The user has specified a data format which is not supported.
+    """
+    def __init__(self, dataFormat):
+        msg = "Unsupported format: {}".format(dataFormat)
+        super(UnsupportedFormatException, self).__init__(msg)

@@ -15,22 +15,26 @@ import json
 import pysam
 import utils
 import generate_gff3_db
-import rnaseq2ga
 import tempfile
 import zipfile
+import glob
 
 utils.ga4ghImportGlue()
 
 # We need to turn off QA because of the import glue
+import ga4gh  # NOQA
 import ga4gh.datarepo as datarepo  # NOQA
 import ga4gh.datamodel.references as references  # NOQA
 import ga4gh.datamodel.datasets as datasets  # NOQA
 import ga4gh.datamodel.variants as variants  # NOQA
 import ga4gh.datamodel.reads as reads  # NOQA
 import ga4gh.datamodel.ontologies as ontologies  # NOQA
-import ga4gh.datamodel.sequenceAnnotations as sequenceAnnotations  # NOQA
+import ga4gh.datamodel.sequence_annotations as sequence_annotations  # NOQA
 import ga4gh.datamodel.bio_metadata as biodata  # NOQA
+import ga4gh.datamodel.genotype_phenotype_featureset as g2p_featureset  # NOQA
+import ga4gh.datamodel.genotype_phenotype as g2p_associationset  # NOQA
 import ga4gh.datamodel.rna_quantification as rna_quantification  # NOQA
+import ga4gh.repo.rnaseq2ga as rnaseq2ga  # NOQA
 
 
 class ComplianceDataMunger(object):
@@ -47,7 +51,7 @@ class ComplianceDataMunger(object):
         self.inputDirectory = inputDirectory
         self.outputDirectory = outputDirectory
         self.repoPath = os.path.abspath(
-            os.path.join(outputDirectory, "repo.db"))
+            os.path.join(outputDirectory, "registry.db"))
         self.tempdir = None
 
         if os.path.exists(self.outputDirectory):
@@ -119,6 +123,8 @@ class ComplianceDataMunger(object):
         self.repo.insertReferenceSet(referenceSet)
 
         dataset = datasets.Dataset("brca1")
+        # Some info is set, it isn't important what
+        dataset.setInfo({"version": ga4gh.__version__})
         self.repo.insertDataset(dataset)
 
         hg00096Individual = biodata.Individual(dataset, "HG00096")
@@ -190,6 +196,7 @@ class ComplianceDataMunger(object):
             readGroupSet = reads.HtslibReadGroupSet(dataset, name)
             readGroupSet.populateFromFile(destFilePath, destFilePath + ".bai")
             readGroupSet.setReferenceSet(referenceSet)
+            dataset.addReadGroupSet(readGroupSet)
             bioSamples = [hg00096BioSample, hg00099BioSample, hg00101BioSample]
             for readGroup in readGroupSet.getReadGroups():
                 for bioSample in bioSamples:
@@ -228,19 +235,47 @@ class ComplianceDataMunger(object):
         seqAnnDest = os.path.join(self.outputDirectory, "gencodev19.db")
         dbgen = generate_gff3_db.Gff32Db(seqAnnSrc, seqAnnDest)
         dbgen.run()
-        gencode = sequenceAnnotations.Gff3DbFeatureSet(dataset, "gencodev19")
+        gencode = sequence_annotations.Gff3DbFeatureSet(dataset, "gencodev19")
         gencode.setOntology(sequenceOntology)
         gencode.populateFromFile(seqAnnDest)
         gencode.setReferenceSet(referenceSet)
 
         self.repo.insertFeatureSet(gencode)
+
+        # add g2p featureSet
+        g2pPath = os.path.join(self.inputDirectory, "cgd")
+        # copy all files input directory to output path
+        outputG2PPath = os.path.join(
+            self.outputDirectory, "cgd")
+        os.makedirs(outputG2PPath)
+        for filename in glob.glob(os.path.join(g2pPath, '*.*')):
+            shutil.copy(filename, outputG2PPath)
+
+        featuresetG2P = g2p_featureset.PhenotypeAssociationFeatureSet(
+            dataset, outputG2PPath)
+        featuresetG2P.setOntology(sequenceOntology)
+        featuresetG2P.setReferenceSet(referenceSet)
+        featuresetG2P.populateFromFile(outputG2PPath)
+        self.repo.insertFeatureSet(featuresetG2P)
+
+        # add g2p phenotypeAssociationSet
+        phenotypeAssociationSet = g2p_associationset\
+            .RdfPhenotypeAssociationSet(dataset, "cgd", outputG2PPath)
+        self.repo.insertPhenotypeAssociationSet(phenotypeAssociationSet)
+
         self.repo.commit()
+        dataset.addFeatureSet(gencode)
 
         # RNA Quantification
         rnaDbName = os.path.join(self.outputDirectory, "rnaseq.db")
+        store = rnaseq2ga.RNASqliteStore(rnaDbName)
+        store.createTables()
         rnaseq2ga.rnaseq2ga(
-            self.inputDirectory, rnaDbName, self.repoPath,
-            featureType="transcript")
+            self.inputDirectory + "/rna_brca1.tsv",
+            rnaDbName, "rna_brca1.tsv", "rsem",
+            featureType="transcript",
+            readGroupSetNames="HG00096", featureSetNames="gencodev19",
+            dataset=dataset)
         rnaQuantificationSet = rna_quantification.SqliteRnaQuantificationSet(
             dataset, "rnaseq")
         rnaQuantificationSet.setReferenceSet(referenceSet)
@@ -249,9 +284,9 @@ class ComplianceDataMunger(object):
 
         self.repo.commit()
 
-    def addVariantSet(self,
-                      variantFileName,
-                      dataset, referenceSet, ontology, bioSamples):
+    def addVariantSet(
+            self, variantFileName, dataset, referenceSet,
+            ontology, bioSamples):
         inputVcf = os.path.join(
             self.inputDirectory, variantFileName)
         outputVcf = os.path.join(

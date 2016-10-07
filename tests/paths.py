@@ -10,7 +10,7 @@ import os
 
 testDir = 'tests'
 testDataDir = os.path.join(testDir, 'data')
-testDataRepo = os.path.join(testDataDir, 'repo.db')
+testDataRepo = os.path.join(testDataDir, 'registry.db')
 
 # references
 referenceSetName = 'chr17'
@@ -58,6 +58,10 @@ featuresPath = os.path.join(
     testDataDir, 'datasets/dataset1/sequenceAnnotations/gencodeV21Set1.db')
 featuresPath2 = os.path.join(
     testDataDir, 'datasets/dataset1/sequenceAnnotations/specialCasesTest.db')
+
+# g2p
+phenotypeAssociationSetPath = os.path.join(
+    testDataDir, 'datasets/dataset1/phenotypes/cgd/')
 
 # misc.
 landingMessageHtml = os.path.join(testDataDir, "test.html")
