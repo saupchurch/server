@@ -122,7 +122,7 @@ class ComplianceDataMunger(object):
         referenceSet = references.HtslibReferenceSet(
             refSetMetadata['assemblyId'])
 
-        referenceSet.populateFromFile(fastaFilePath)
+        referenceSet.populateFromFile(os.path.abspath(fastaFilePath))
         referenceSet.setAssemblyId(refSetMetadata['assemblyId'])
         referenceSet.setDescription(refSetMetadata['description'])
         referenceSet.setNcbiTaxonId(refSetMetadata['ncbiTaxonId'])
@@ -147,14 +147,14 @@ class ComplianceDataMunger(object):
                     "individual_HG00096.json")) as jsonString:
             hg00096Individual.populateFromJson(jsonString.read())
         self.repo.insertIndividual(hg00096Individual)
-        hg00096BioSample = biodata.BioSample(dataset, "HG00096")
+        hg00096Biosample = biodata.Biosample(dataset, "HG00096")
         with open(
                 os.path.join(
                     self.inputDirectory,
-                    "bioSample_HG00096.json")) as jsonString:
-            hg00096BioSample.populateFromJson(jsonString.read())
-        hg00096BioSample.setIndividualId(hg00096Individual.getId())
-        self.repo.insertBioSample(hg00096BioSample)
+                    "biosample_HG00096.json")) as jsonString:
+            hg00096Biosample.populateFromJson(jsonString.read())
+        hg00096Biosample.setIndividualId(hg00096Individual.getId())
+        self.repo.insertBiosample(hg00096Biosample)
         hg00099Individual = biodata.Individual(dataset, "HG00099")
         with open(
                 os.path.join(
@@ -162,14 +162,14 @@ class ComplianceDataMunger(object):
                     "individual_HG00099.json")) as jsonString:
             hg00099Individual.populateFromJson(jsonString.read())
         self.repo.insertIndividual(hg00099Individual)
-        hg00099BioSample = biodata.BioSample(dataset, "HG00099")
+        hg00099Biosample = biodata.Biosample(dataset, "HG00099")
         with open(
                 os.path.join(
                     self.inputDirectory,
-                    "bioSample_HG00099.json")) as jsonString:
-            hg00099BioSample.populateFromJson(jsonString.read())
-        hg00099BioSample.setIndividualId(hg00099Individual.getId())
-        self.repo.insertBioSample(hg00099BioSample)
+                    "biosample_HG00099.json")) as jsonString:
+            hg00099Biosample.populateFromJson(jsonString.read())
+        hg00099Biosample.setIndividualId(hg00099Individual.getId())
+        self.repo.insertBiosample(hg00099Biosample)
         hg00101Individual = biodata.Individual(dataset, "HG00101")
         with open(
                 os.path.join(
@@ -177,14 +177,14 @@ class ComplianceDataMunger(object):
                     "individual_HG00101.json")) as jsonString:
             hg00101Individual.populateFromJson(jsonString.read())
         self.repo.insertIndividual(hg00101Individual)
-        hg00101BioSample = biodata.BioSample(dataset, "HG00101")
+        hg00101Biosample = biodata.Biosample(dataset, "HG00101")
         with open(
                 os.path.join(
                     self.inputDirectory,
-                    "bioSample_HG00101.json")) as jsonString:
-            hg00101BioSample.populateFromJson(jsonString.read())
-        hg00101BioSample.setIndividualId(hg00101Individual.getId())
-        self.repo.insertBioSample(hg00101BioSample)
+                    "biosample_HG00101.json")) as jsonString:
+            hg00101Biosample.populateFromJson(jsonString.read())
+        hg00101Biosample.setIndividualId(hg00101Individual.getId())
+        self.repo.insertBiosample(hg00101Biosample)
 
         readFiles = [
             "brca1_HG00096.sam",
@@ -207,14 +207,15 @@ class ComplianceDataMunger(object):
             readSrc.close()
             pysam.index(destFilePath)
             readGroupSet = reads.HtslibReadGroupSet(dataset, name)
-            readGroupSet.populateFromFile(destFilePath, destFilePath + ".bai")
+            readGroupSet.populateFromFile(os.path.abspath(
+                destFilePath), os.path.abspath(destFilePath + ".bai"))
             readGroupSet.setReferenceSet(referenceSet)
             dataset.addReadGroupSet(readGroupSet)
-            bioSamples = [hg00096BioSample, hg00099BioSample, hg00101BioSample]
+            biosamples = [hg00096Biosample, hg00099Biosample, hg00101Biosample]
             for readGroup in readGroupSet.getReadGroups():
-                for bioSample in bioSamples:
-                    if bioSample.getLocalId() == readGroup.getSampleName():
-                        readGroup.setBioSampleId(bioSample.getId())
+                for biosample in biosamples:
+                    if biosample.getLocalId() == readGroup.getSampleName():
+                        readGroup.setBiosampleId(biosample.getId())
             self.repo.insertReadGroupSet(readGroupSet)
 
         ontologyMapFileName = "so-xp-simple.obo"
@@ -225,7 +226,7 @@ class ComplianceDataMunger(object):
         shutil.copy(inputOntologyMap, outputOntologyMap)
 
         sequenceOntology = ontologies.Ontology("so-xp-simple")
-        sequenceOntology.populateFromFile(outputOntologyMap)
+        sequenceOntology.populateFromFile(os.path.abspath(outputOntologyMap))
         sequenceOntology._id = "so-xp-simple"
         self.repo.insertOntology(sequenceOntology)
         self.repo.addOntology(sequenceOntology)
@@ -240,7 +241,7 @@ class ComplianceDataMunger(object):
                 dataset,
                 referenceSet,
                 sequenceOntology,
-                bioSamples)
+                biosamples)
 
         # Sequence annotations
         seqAnnFile = "brca1_gencodev19.gff3"
@@ -250,7 +251,7 @@ class ComplianceDataMunger(object):
         dbgen.run()
         gencode = sequence_annotations.Gff3DbFeatureSet(dataset, "gencodev19")
         gencode.setOntology(sequenceOntology)
-        gencode.populateFromFile(seqAnnDest)
+        gencode.populateFromFile(os.path.abspath(seqAnnDest))
         gencode.setReferenceSet(referenceSet)
 
         self.repo.insertFeatureSet(gencode)
@@ -265,15 +266,16 @@ class ComplianceDataMunger(object):
             shutil.copy(filename, outputG2PPath)
 
         featuresetG2P = g2p_featureset.PhenotypeAssociationFeatureSet(
-            dataset, outputG2PPath)
+            dataset, os.path.abspath(outputG2PPath))
         featuresetG2P.setOntology(sequenceOntology)
         featuresetG2P.setReferenceSet(referenceSet)
-        featuresetG2P.populateFromFile(outputG2PPath)
+        featuresetG2P.populateFromFile(os.path.abspath(outputG2PPath))
         self.repo.insertFeatureSet(featuresetG2P)
 
         # add g2p phenotypeAssociationSet
-        phenotypeAssociationSet = g2p_associationset\
-            .RdfPhenotypeAssociationSet(dataset, "cgd", outputG2PPath)
+        phenotypeAssociationSet = \
+            g2p_associationset.RdfPhenotypeAssociationSet(
+                dataset, "cgd", os.path.abspath(outputG2PPath))
         self.repo.insertPhenotypeAssociationSet(phenotypeAssociationSet)
 
         self.repo.commit()
@@ -290,18 +292,18 @@ class ComplianceDataMunger(object):
             readGroupSetNames="HG00096",
             dataset=dataset,
             featureSetNames="gencodev19",
-            bioSampleId=hg00096BioSample.getId())
+            biosampleId=hg00096Biosample.getId())
         rnaQuantificationSet = rna_quantification.SqliteRnaQuantificationSet(
             dataset, "rnaseq")
         rnaQuantificationSet.setReferenceSet(referenceSet)
-        rnaQuantificationSet.populateFromFile(rnaDbName)
+        rnaQuantificationSet.populateFromFile(os.path.abspath(rnaDbName))
         self.repo.insertRnaQuantificationSet(rnaQuantificationSet)
 
         self.repo.commit()
 
     def addVariantSet(
             self, variantFileName, dataset, referenceSet,
-            ontology, bioSamples):
+            ontology, biosamples):
         inputVcf = os.path.join(
             self.inputDirectory, variantFileName)
         outputVcf = os.path.join(
@@ -312,12 +314,13 @@ class ComplianceDataMunger(object):
             dataset, variantFileName.split('_')[1])
         variantSet.setReferenceSet(referenceSet)
         variantSet.populateFromFile(
-            [outputVcf + ".gz"], [outputVcf + ".gz.tbi"])
+            [os.path.abspath(outputVcf + ".gz")],
+            [os.path.abspath(outputVcf + ".gz.tbi")])
         variantSet.checkConsistency()
         for callSet in variantSet.getCallSets():
-            for bioSample in bioSamples:
-                if bioSample.getLocalId() == callSet.getLocalId():
-                    callSet.setBioSampleId(bioSample.getId())
+            for biosample in biosamples:
+                if biosample.getLocalId() == callSet.getLocalId():
+                    callSet.setBiosampleId(biosample.getId())
         self.repo.insertVariantSet(variantSet)
         for annotationSet in variantSet.getVariantAnnotationSets():
             annotationSet.setOntology(ontology)
