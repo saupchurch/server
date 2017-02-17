@@ -12,7 +12,8 @@ import ga4gh.server.cli.server as cli_server
 import ga4gh.server.cli.repomanager as cli_repomanager
 import ga4gh.server.cli.ga2vcf as cli_ga2vcf
 import ga4gh.server.cli.ga2sam as cli_ga2sam
-import ga4gh.server.protocol as protocol
+
+import ga4gh.schemas.protocol as protocol
 
 
 class TestServerArguments(unittest.TestCase):
@@ -135,7 +136,7 @@ class TestRepoManagerCli(unittest.TestCase):
         description = "description"
         cliInput = (
             "add-referenceset {} {} --description={} "
-            "--ncbiTaxonId NCBITAXONID "
+            "--species NCBITAXONID-JSON "
             "--isDerived True "
             "--assemblyId ASSEMBLYID "
             "--sourceAccessions SOURCEACCESSIONS "
@@ -145,7 +146,7 @@ class TestRepoManagerCli(unittest.TestCase):
         self.assertEquals(args.registryPath, self.registryPath)
         self.assertEquals(args.filePath, self.filePath)
         self.assertEquals(args.description, description)
-        self.assertEquals(args.ncbiTaxonId, "NCBITAXONID")
+        self.assertEquals(args.species, "NCBITAXONID-JSON")
         self.assertEquals(args.isDerived, True)
         self.assertEquals(args.assemblyId, "ASSEMBLYID")
         self.assertEquals(args.sourceAccessions, "SOURCEACCESSIONS")

@@ -11,7 +11,8 @@ import collections
 import pysam
 
 import ga4gh.server.datamodel.reads as reads
-import ga4gh.server.protocol as protocol
+
+import ga4gh.schemas.protocol as protocol
 
 
 class AbstractConverter(object):
@@ -241,7 +242,7 @@ class SamLine(object):
     @classmethod
     def toTags(cls, read):
         tags = []
-        for tag, value in read.info.items():
+        for tag, value in read.attributes.attr.items():
             val = cls._parseTagValue(tag, value)
             tags.append((tag.encode(cls._encoding), val))
         retval = tuple(tags)

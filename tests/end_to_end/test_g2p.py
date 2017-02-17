@@ -4,9 +4,10 @@ G2P testing on the test data
 import unittest
 
 import ga4gh.server.datamodel as datamodel
-import ga4gh.server.protocol as protocol
 import ga4gh.server.frontend as frontend
 import tests.paths as paths
+
+import ga4gh.schemas.protocol as protocol
 
 
 class TestG2P(unittest.TestCase):
@@ -199,7 +200,7 @@ class TestG2P(unittest.TestCase):
         self.assertIsNotNone(feature)
         self.assertEqual(request.feature_id, feature.id)
         self.assertIsNotNone(feature.feature_type)
-        self.assertIsNotNone(feature.feature_type.id)
+        self.assertIsNotNone(feature.feature_type.term_id)
         self.assertEqual(feature.reference_name,  "chr10")
         self.assertEqual(feature.start,  43617416)
         self.assertEqual(feature.end,  43617416)
@@ -258,7 +259,7 @@ class TestG2P(unittest.TestCase):
         request = protocol.SearchPhenotypesRequest()
         request.phenotype_association_set_id = \
             self.getPhenotypeAssociationSetId()
-        request.type.id = "http://ohsu.edu/cgd/5c895709"
+        request.type.term_id = "http://ohsu.edu/cgd/5c895709"
         postUrl = '/phenotypes/search'
         response = self.sendSearchRequest(
             postUrl,
@@ -271,7 +272,7 @@ class TestG2P(unittest.TestCase):
         request.phenotype_association_set_id = \
             self.getPhenotypeAssociationSetId()
         ontologyterm = protocol.OntologyTerm()
-        ontologyterm.id = "http://ohsu.edu/cgd/sensitivity"
+        ontologyterm.term_id = "http://ohsu.edu/cgd/sensitivity"
         request.qualifiers.extend([ontologyterm])
         postUrl = '/phenotypes/search'
         response = self.sendSearchRequest(
@@ -285,7 +286,7 @@ class TestG2P(unittest.TestCase):
         request.phenotype_association_set_id = \
             self.getPhenotypeAssociationSetId()
         ontologyterm = protocol.OntologyTerm()
-        ontologyterm.id = "http://purl.obolibrary.org/obo/PATO_0000396"
+        ontologyterm.term_id = "http://purl.obolibrary.org/obo/PATO_0000396"
         request.qualifiers.extend([ontologyterm])
         postUrl = '/phenotypes/search'
         response = self.sendSearchRequest(
@@ -299,9 +300,9 @@ class TestG2P(unittest.TestCase):
         request.phenotype_association_set_id = \
             self.getPhenotypeAssociationSetId()
         ontologyterm = protocol.OntologyTerm()
-        ontologyterm.id = "http://purl.obolibrary.org/obo/PATO_0000396"
+        ontologyterm.term_id = "http://purl.obolibrary.org/obo/PATO_0000396"
         ontologyterm2 = protocol.OntologyTerm()
-        ontologyterm2.id = "http://purl.obolibrary.org/obo/PATO_0000460"
+        ontologyterm2.term_id = "http://purl.obolibrary.org/obo/PATO_0000460"
         request.qualifiers.extend([ontologyterm, ontologyterm2])
         postUrl = '/phenotypes/search'
         response = self.sendSearchRequest(
@@ -341,7 +342,8 @@ class TestG2P(unittest.TestCase):
         request.phenotype_association_set_id = \
             self.getPhenotypeAssociationSetId()
         request.description = "Melanoma, NOS with response to therapy"
-        request.age_of_onset.id = "http://purl.obolibrary.org/obo/HP_0003581"
+        request.age_of_onset.term_id = \
+            "http://purl.obolibrary.org/obo/HP_0003581"
         postUrl = '/phenotypes/search'
         response = self.sendSearchRequest(
             postUrl,

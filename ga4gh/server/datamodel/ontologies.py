@@ -8,11 +8,10 @@ from __future__ import unicode_literals
 import collections
 import os.path
 
-import ga4gh.server.protocol as protocol
 import ga4gh.server.exceptions as exceptions
 import ga4gh.server.datamodel.obo_parser as obo_parser
 
-import ga4gh.schemas.pb as pb
+import ga4gh.schemas.protocol as protocol
 
 
 SEQUENCE_ONTOLOGY_PREFIX = "SO"
@@ -74,12 +73,12 @@ class Ontology(object):
         self._dataUrl = dataUrl
         self._readFile()
 
-    def populateFromRow(self, row):
+    def populateFromRow(self, ontologyRecord):
         """
         Populates this Ontology using values in the specified DB row.
         """
-        self._id = row[b'id']
-        self._dataUrl = row[b'dataUrl']
+        self._id = ontologyRecord.id
+        self._dataUrl = ontologyRecord.dataurl
         self._readFile()
         # TODO sanity check the stored values against what we have just read.
 
@@ -137,7 +136,5 @@ class Ontology(object):
             termId = termIds[0]
         term = protocol.OntologyTerm()
         term.term = name
-        term.id = termId
-        term.source_name = self._sourceName
-        term.source_version = pb.string(self._sourceVersion)
+        term.term_id = termId
         return term

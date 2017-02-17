@@ -7,9 +7,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import ga4gh.server.datamodel as datamodel
-import ga4gh.server.protocol as protocol
 import ga4gh.server.exceptions as exceptions
 import ga4gh.server.sqlite_backend as sqlite_backend
+
+import ga4gh.schemas.protocol as protocol
 
 
 """
@@ -58,6 +59,7 @@ class AbstractExpressionLevel(datamodel.DatamodelObject):
         protocolElement.score = self._score
         protocolElement.conf_interval_low = self._confIntervalLow
         protocolElement.conf_interval_high = self._confIntervalHigh
+        self.serializeAttributes(protocolElement)
         return protocolElement
 
 
@@ -67,7 +69,7 @@ class SqliteExpressionLevel(AbstractExpressionLevel):
     """
     def __init__(self, parentContainer, record):
         super(SqliteExpressionLevel, self).__init__(
-            parentContainer, record["id"])
+            parentContainer, str(record["id"]))
         self._expression = record["expression"]
         self._featureId = record["feature_id"]
         # sqlite stores booleans as int (False = 0, True = 1)
@@ -150,6 +152,7 @@ class AbstractRnaQuantificationSet(datamodel.DatamodelObject):
         protocolElement.id = self.getId()
         protocolElement.dataset_id = self._parentContainer.getId()
         protocolElement.name = self._name
+        self.serializeAttributes(protocolElement)
         return protocolElement
 
 
@@ -179,12 +182,13 @@ class SqliteRnaQuantificationSet(AbstractRnaQuantificationSet):
         self._db = SqliteRnaBackend(self._dbFilePath)
         self.addRnaQuants()
 
-    def populateFromRow(self, row):
+    def populateFromRow(self, quantificationSetRecord):
         """
         Populates the instance variables of this RnaQuantificationSet from the
         specified DB row.
         """
-        self._dbFilePath = row[b'dataUrl']
+        self._dbFilePath = quantificationSetRecord.dataurl
+        self.setAttributesJson(quantificationSetRecord.attributes)
         self._db = SqliteRnaBackend(self._dbFilePath)
         self.addRnaQuants()
 
@@ -229,6 +233,7 @@ class AbstractRnaQuantification(datamodel.DatamodelObject):
         protocolElement.feature_set_ids.extend(self._featureSetIds)
         protocolElement.rna_quantification_set_id = \
             self._parentContainer.getId()
+        self.serializeAttributes(protocolElement)
         return protocolElement
 
     def addRnaQuantMetadata(self, fields):
