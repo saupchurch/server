@@ -273,7 +273,7 @@ def rnaseq2ga(quantificationFilename, sqlFilename, localName, rnaType,
     in a sqlite database for use by the GA4GH reference server.
 
     Supports the following quantification output types:
-    Cufflinks, kallisto, RSEM
+    Cufflinks, kallisto, RSEM.
     """
     readGroupSetName = ""
     if readGroupSetNames:
