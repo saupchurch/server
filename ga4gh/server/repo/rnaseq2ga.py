@@ -260,8 +260,8 @@ def writeRnaseqTable(rnaDB, analysisIds, description, annotationId,
 
 
 def writeExpressionTable(writer, data):
-    for rnaQuantId, quantfilename in data:
-        writer.writeExpression(rnaQuantId, quantfilename)
+    for rnaQuantId, quantFilename in data:
+        writer.writeExpression(rnaQuantId, quantFilename)
 
 
 def rnaseq2ga(quantificationFilename, sqlFilename, localName, rnaType,
