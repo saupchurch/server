@@ -425,6 +425,24 @@ class Backend(object):
             request, featureSet, parentId)
         return iterator
 
+    def continuousGenerator(self, request):
+        """
+        Returns a generator over the (continuous, nextPageToken) pairs
+        defined by the (JSON string) request.
+        """
+        compoundId = None
+        if request.continuous_set_id != "":
+            compoundId = datamodel.ContinuousSetCompoundId.parse(
+                request.continuous_set_id)
+        if compoundId is None:
+            raise exceptions.ContinuousSetNotSpecifiedException()
+
+        dataset = self.getDataRepository().getDataset(
+            compoundId.dataset_id)
+        continuousSet = dataset.getContinuousSet(request.continuous_set_id)
+        iterator = paging.ContinuousIterator(request, continuousSet)
+        return iterator
+
     def phenotypesGenerator(self, request):
         """
         Returns a generator over the (phenotypes, nextPageToken) pairs
@@ -489,6 +507,16 @@ class Backend(object):
             request, dataset.getNumFeatureSets(),
             dataset.getFeatureSetByIndex)
 
+    def continuousSetsGenerator(self, request):
+        """
+        Returns a generator over the (continuousSet, nextPageToken) pairs
+        defined by the specified request.
+        """
+        dataset = self.getDataRepository().getDataset(request.dataset_id)
+        return self._topLevelObjectGenerator(
+            request, dataset.getNumContinuousSets(),
+            dataset.getContinuousSetByIndex)
+
     def rnaQuantificationSetsGenerator(self, request):
         """
         Returns a generator over the (rnaQuantificationSet, nextPageToken)
@@ -542,6 +570,15 @@ class Backend(object):
         iterator = paging.ExpressionLevelsIterator(
             request, rnaQuant)
         return iterator
+
+    def peersGenerator(self, request):
+        """
+        Returns a generator over the (peer, nextPageToken) pairs
+        defined by the specified request.
+        """
+        return paging.PeerIterator(
+            request,
+            self.getDataRepository())
 
     ###########################################################
     #
@@ -648,6 +685,65 @@ class Backend(object):
         callSet = variantSet.getCallSet(id_)
         return self.runGetRequest(callSet)
 
+    def runGetInfo(self, request):
+        """
+        Returns information about the service including protocol version.
+        """
+        return protocol.toJson(protocol.GetInfoResponse(
+            protocol_version=protocol.version))
+
+    def runAddAnnouncement(self, flaskrequest):
+        """
+        Takes a flask request from the frontend and attempts to parse
+        into an AnnouncePeerRequest. If successful, it will log the
+        announcement to the `announcement` table with some other metadata
+        gathered from the request.
+        """
+        announcement = {}
+        # We want to parse the request ourselves to collect a little more
+        # data about it.
+        try:
+            requestData = protocol.fromJson(
+                flaskrequest.get_data(), protocol.AnnouncePeerRequest)
+            announcement['hostname'] = flaskrequest.host_url
+            announcement['remote_addr'] = flaskrequest.remote_addr
+            announcement['user_agent'] = flaskrequest.headers.get('User-Agent')
+        except AttributeError:
+            # Sometimes in testing we will send protocol requests instead
+            # of flask requests and so the hostname and user agent won't
+            # be present.
+            try:
+                requestData = protocol.fromJson(
+                    flaskrequest, protocol.AnnouncePeerRequest)
+            except Exception as e:
+                raise exceptions.InvalidJsonException(e)
+        except Exception as e:
+            raise exceptions.InvalidJsonException(e)
+
+        # Validate the url before accepting the announcement
+        peer = datamodel.peers.Peer(requestData.peer.url)
+        peer.setAttributesJson(protocol.toJson(
+                requestData.peer.attributes))
+        announcement['url'] = peer.getUrl()
+        announcement['attributes'] = peer.getAttributes()
+        try:
+            self.getDataRepository().insertAnnouncement(announcement)
+        except:
+            raise exceptions.BadRequestException(announcement['url'])
+        return protocol.toJson(
+            protocol.AnnouncePeerResponse(success=True))
+
+    def runListPeers(self, request):
+        """
+        Takes a ListPeersRequest and returns a ListPeersResponse using
+        a page_token and page_size if provided.
+        """
+        return self.runSearchRequest(
+            request,
+            protocol.ListPeersRequest,
+            protocol.ListPeersResponse,
+            self.peersGenerator)
+
     def runGetVariant(self, id_):
         """
         Returns a variant with the given id
@@ -745,6 +841,15 @@ class Backend(object):
         dataset = self.getDataRepository().getDataset(compoundId.dataset_id)
         featureSet = dataset.getFeatureSet(id_)
         return self.runGetRequest(featureSet)
+
+    def runGetContinuousSet(self, id_):
+        """
+        Runs a getContinuousSet request for the specified ID.
+        """
+        compoundId = datamodel.ContinuousSetCompoundId.parse(id_)
+        dataset = self.getDataRepository().getDataset(compoundId.dataset_id)
+        continuousSet = dataset.getContinuousSet(id_)
+        return self.runGetRequest(continuousSet)
 
     def runGetDataset(self, id_):
         """
@@ -928,6 +1033,29 @@ class Backend(object):
             request, protocol.SearchFeaturesRequest,
             protocol.SearchFeaturesResponse,
             self.featuresGenerator)
+
+    def runSearchContinuousSets(self, request):
+        """
+        Returns a SearchContinuousSetsResponse for the specified
+        SearchContinuousSetsRequest object.
+        """
+        return self.runSearchRequest(
+            request, protocol.SearchContinuousSetsRequest,
+            protocol.SearchContinuousSetsResponse,
+            self.continuousSetsGenerator)
+
+    def runSearchContinuous(self, request):
+        """
+        Returns a SearchContinuousResponse for the specified
+        SearchContinuousRequest object.
+
+        :param request: JSON string representing searchContinuousRequest
+        :return: JSON string representing searchContinuousResponse
+        """
+        return self.runSearchRequest(
+            request, protocol.SearchContinuousRequest,
+            protocol.SearchContinuousResponse,
+            self.continuousGenerator)
 
     def runSearchGenotypePhenotypes(self, request):
         return self.runSearchRequest(

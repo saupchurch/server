@@ -69,6 +69,11 @@ featuresDir = os.path.join(datasetDir, 'sequenceAnnotations')
 featuresPath = os.path.join(featuresDir, 'gencodeV21Set1.db')
 featuresPath2 = os.path.join(featuresDir, 'specialCasesTest.db')
 
+# continuous
+continuousSetName = 'bigwig_1'
+continuousDir = os.path.join(datasetDir, 'continuous')
+continuousPath = os.path.join(continuousDir, 'bigwig_1.bw')
+
 # g2p
 phenotypesDir = os.path.join(datasetDir, 'phenotypes')
 phenotypeAssociationSetPath = os.path.join(phenotypesDir, 'cgd')
@@ -80,3 +85,5 @@ rnaQuantificationSetDbPath = os.path.join(rnaQuantDir, "ENCFF305LZB.db")
 
 # misc.
 landingMessageHtml = os.path.join(testDataDir, "test.html")
+
+peerUrl = "http://1kgenomes.ga4gh.org"

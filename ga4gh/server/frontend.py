@@ -31,9 +31,9 @@ import ga4gh.server.datamodel as datamodel
 import ga4gh.server.exceptions as exceptions
 import ga4gh.server.datarepo as datarepo
 import ga4gh.server.auth as auth
+import ga4gh.server.network as network
 
 import ga4gh.schemas.protocol as protocol
-
 
 MIMETYPE = "application/json"
 SEARCH_ENDPOINT_METHODS = ['POST', 'OPTIONS']
@@ -155,6 +155,13 @@ class ServerStatus(object):
         """
         return app.backend.getDataRepository().getDataset(
             datasetId).getFeatureSets()
+
+    def getContinuousSets(self, datasetId):
+        """
+        Returns the list of continuous sets for the dataset
+        """
+        return app.backend.getDataRepository().getDataset(
+            datasetId).getContinuousSets()
 
     def getReadGroupSets(self, datasetId):
         """
@@ -298,6 +305,11 @@ def configure(configFile=None, baseConfig="ProductionConfig",
         app.cache_dir = '/tmp/ga4gh'
     app.cache = FileSystemCache(
         app.cache_dir, threshold=5000, default_timeout=600, mode=384)
+    # Peer service initialization
+    network.initialize(
+        app.config.get('INITIAL_PEERS'),
+        app.backend.getDataRepository(),
+        app.logger)
     app.oidcClient = None
     app.myPort = port
     if app.config.get('AUTH0_ENABLED'):
@@ -358,9 +370,12 @@ def handleHttpPost(request, endpoint):
     Handles the specified HTTP POST request, which maps to the specified
     protocol handler endpoint and protocol request class.
     """
-    if request.mimetype != MIMETYPE:
+    if request.mimetype and request.mimetype != MIMETYPE:
         raise exceptions.UnsupportedMediaTypeException()
-    responseStr = endpoint(request.get_data())
+    request = request.get_data()
+    if request == '' or request is None:
+        request = '{}'
+    responseStr = endpoint(request)
     return getFlaskResponse(responseStr)
 
 
@@ -601,6 +616,13 @@ def robots():
         app.static_folder, flask.request.path[1:])
 
 
+@DisplayedRoute('/info')
+@requires_auth
+def getInfo():
+    return handleFlaskGetRequest(
+        None, flask.request, app.backend.runGetInfo)
+
+
 @DisplayedRoute('/references/<id>')
 @requires_auth
 def getReference(id):
@@ -695,6 +717,20 @@ def searchFeatures():
         flask.request, app.backend.runSearchFeatures)
 
 
+@DisplayedRoute('/continuoussets/search', postMethod=True)
+@requires_auth
+def searchContinuousSets():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchContinuousSets)
+
+
+@DisplayedRoute('/continuous/search', postMethod=True)
+@requires_auth
+def searchContinuous():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runSearchContinuous)
+
+
 @DisplayedRoute('/biosamples/search', postMethod=True)
 @requires_auth
 def searchBiosamples():
@@ -707,6 +743,21 @@ def searchBiosamples():
 def searchIndividuals():
     return handleFlaskPostRequest(
         flask.request, app.backend.runSearchIndividuals)
+
+
+@DisplayedRoute('/peers/list', postMethod=True)
+@requires_auth
+def listPeers():
+    return handleFlaskPostRequest(
+        flask.request, app.backend.runListPeers)
+
+
+@DisplayedRoute('/announce', postMethod=True)
+@requires_auth
+def announce():
+    # We can't use the post handler here because we want detailed request
+    # data.
+    return app.backend.runAddAnnouncement(flask.request)
 
 
 @DisplayedRoute(
@@ -807,6 +858,15 @@ def getFeatureSet(id):
 def getFeature(id):
     return handleFlaskGetRequest(
         id, flask.request, app.backend.runGetFeature)
+
+
+@DisplayedRoute(
+    '/continuoussets/<no(search):id>',
+    pathDisplay='/continuoussets/<id>')
+@requires_auth
+def getcontinuousSet(id):
+    return handleFlaskGetRequest(
+        id, flask.request, app.backend.runGetContinuousSet)
 
 
 @DisplayedRoute(

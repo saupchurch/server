@@ -16,6 +16,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import datetime
 import peewee as pw
 
 # The databaseProxy is used to dynamically changed the
@@ -38,6 +39,27 @@ class BaseModel(pw.Model):
 
     class Meta:
         database = databaseProxy
+
+
+class Peer(BaseModel):
+    url = pw.TextField(primary_key=True, null=False, unique=True)
+
+
+class Announcement(BaseModel):
+    # Provides the storage layer for AnnouncePeerRequest
+    # Primary key for the record autoincrement
+    id = pw.PrimaryKeyField()
+    # URL submitted as a possible peer
+    url = pw.TextField(null=False)
+    # Other information about the request stored as JSON.
+    remote_addr = pw.TextField(null=True)
+    user_agent = pw.TextField(null=True)
+    # The time at which this record was created.
+    created = pw.DateTimeField()
+
+    def save(self, *args, **kwargs):
+        self.created = datetime.datetime.now()
+        return super(Announcement, self).save(*args, **kwargs)
 
 
 class Dataset(BaseModel):
@@ -144,6 +166,25 @@ class Featureset(BaseModel):
 
     class Meta:
         db_table = 'FeatureSet'
+        indexes = (
+            (('datasetid', 'name'), True),
+        )
+
+
+class ContinuousSet(BaseModel):
+    dataurl = pw.TextField(db_column='dataUrl')
+    datasetid = pw.ForeignKeyField(
+        db_column='datasetId', rel_model=Dataset, to_field='id')
+    id = pw.TextField(primary_key=True)
+    info = pw.TextField(null=True)
+    name = pw.TextField()
+    referencesetid = pw.ForeignKeyField(
+        db_column='referenceSetId', rel_model=Referenceset, to_field='id')
+    sourceuri = pw.TextField(
+        db_column='sourceUri', null=True)
+
+    class Meta:
+        db_table = 'ContinuousSet'
         indexes = (
             (('datasetid', 'name'), True),
         )

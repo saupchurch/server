@@ -22,7 +22,9 @@ import ga4gh.server.datamodel.reads as reads
 import ga4gh.server.datamodel.references as references
 import ga4gh.server.datamodel.rna_quantification as rna_quantification
 import ga4gh.server.datamodel.sequence_annotations as sequence_annotations
+import ga4gh.server.datamodel.continuous as continuous
 import ga4gh.server.datamodel.variants as variants
+import ga4gh.server.datamodel.peers as peers
 import ga4gh.server.datarepo as datarepo
 import ga4gh.server.exceptions as exceptions
 import ga4gh.server.repo.rnaseq2ga as rnaseq2ga
@@ -126,6 +128,20 @@ class RepoManager(object):
         self._openRepo()
         # TODO this is _very_ crude. We need much more options and detail here.
         self._repo.printSummary()
+
+    def listAnnouncements(self):
+        """
+        Lists all the announcements the repo has received.
+        """
+        self._openRepo()
+        self._repo.printAnnouncements()
+
+    def clearAnnouncements(self):
+        """
+        Clears the list of announcements from the repo.
+        """
+        self._openRepo()
+        self._repo.clearAnnouncements()
 
     def verify(self):
         """
@@ -429,6 +445,38 @@ class RepoManager(object):
             self._updateRepo(self._repo.removeFeatureSet, featureSet)
         self._confirmDelete("FeatureSet", featureSet.getLocalId(), func)
 
+    def addContinuousSet(self):
+        """
+        Adds a new continuous set into this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        filePath = self._getFilePath(self._args.filePath,
+                                     self._args.relativePath)
+        name = getNameFromPath(self._args.filePath)
+        continuousSet = continuous.FileContinuousSet(dataset, name)
+        referenceSetName = self._args.referenceSetName
+        if referenceSetName is None:
+            raise exceptions.RepoManagerException(
+                "A reference set name must be provided")
+        referenceSet = self._repo.getReferenceSetByName(referenceSetName)
+        continuousSet.setReferenceSet(referenceSet)
+        continuousSet.populateFromFile(filePath)
+        self._updateRepo(self._repo.insertContinuousSet, continuousSet)
+
+    def removeContinuousSet(self):
+        """
+        Removes a continuous set from this repo
+        """
+        self._openRepo()
+        dataset = self._repo.getDatasetByName(self._args.datasetName)
+        continuousSet = dataset.getContinuousSetByName(
+                            self._args.continuousSetName)
+
+        def func():
+            self._updateRepo(self._repo.removeContinuousSet, continuousSet)
+        self._confirmDelete("ContinuousSet", continuousSet.getLocalId(), func)
+
     def addBiosample(self):
         """
         Adds a new biosample into this repo
@@ -474,6 +522,33 @@ class RepoManager(object):
         def func():
             self._updateRepo(self._repo.removeIndividual, individual)
         self._confirmDelete("Individual", individual.getLocalId(), func)
+
+    def addPeer(self):
+        """
+        Adds a new peer into this repo
+        """
+        self._openRepo()
+        try:
+            peer = peers.Peer(
+                self._args.url, json.loads(self._args.attributes))
+        except exceptions.BadUrlException:
+            raise exceptions.RepoManagerException("The URL for the peer was "
+                                                  "malformed.")
+        except ValueError as e:
+            raise exceptions.RepoManagerException(
+                "The attributes message "
+                "was malformed. {}".format(e))
+        self._updateRepo(self._repo.insertPeer, peer)
+
+    def removePeer(self):
+        """
+        Removes a peer by URL from this repo
+        """
+        self._openRepo()
+
+        def func():
+            self._updateRepo(self._repo.removePeer, self._args.url)
+        self._confirmDelete("Peer", self._args.url, func)
 
     def removeOntology(self):
         """
@@ -622,6 +697,12 @@ class RepoManager(object):
             help="the name of the ontology")
 
     @classmethod
+    def addUrlArgument(cls, subparser):
+        subparser.add_argument(
+            "url",
+            help="The URL of the given resource")
+
+    @classmethod
     def addReadGroupSetNameArgument(cls, subparser):
         subparser.add_argument(
             "readGroupSetName",
@@ -638,6 +719,12 @@ class RepoManager(object):
         subparser.add_argument(
             "featureSetName",
             help="the name of the feature set")
+
+    @classmethod
+    def addContinuousSetNameArgument(cls, subparser):
+        subparser.add_argument(
+            "continuousSetName",
+            help="the name of the continuous set")
 
     @classmethod
     def addIndividualNameArgument(cls, subparser):
@@ -743,6 +830,33 @@ class RepoManager(object):
             subparsers, "list", "List the contents of the repo")
         listParser.set_defaults(runner="list")
         cls.addRepoArgument(listParser)
+
+        listAnnouncementsParser = common_cli.addSubparser(
+            subparsers, "list-announcements", "List the announcements in"
+                                              "the repo.")
+        listAnnouncementsParser.set_defaults(runner="listAnnouncements")
+        cls.addRepoArgument(listAnnouncementsParser)
+
+        clearAnnouncementsParser = common_cli.addSubparser(
+            subparsers, "clear-announcements", "List the announcements in"
+                                               "the repo.")
+        clearAnnouncementsParser.set_defaults(runner="clearAnnouncements")
+        cls.addRepoArgument(clearAnnouncementsParser)
+
+        addPeerParser = common_cli.addSubparser(
+            subparsers, "add-peer", "Add a peer to the registry by URL.")
+        addPeerParser.set_defaults(runner="addPeer")
+        cls.addRepoArgument(addPeerParser)
+        cls.addUrlArgument(addPeerParser)
+        cls.addAttributesArgument(addPeerParser)
+
+        removePeerParser = common_cli.addSubparser(
+            subparsers, "remove-peer", "Remove a peer from "
+                                       "the registry by URL.")
+        removePeerParser.set_defaults(runner="removePeer")
+        cls.addRepoArgument(removePeerParser)
+        cls.addUrlArgument(removePeerParser)
+        cls.addForceOption(removePeerParser)
 
         addDatasetParser = common_cli.addSubparser(
             subparsers, "add-dataset", "Add a dataset to the data repo")
@@ -923,6 +1037,28 @@ class RepoManager(object):
         cls.addDatasetNameArgument(removeFeatureSetParser)
         cls.addFeatureSetNameArgument(removeFeatureSetParser)
         cls.addForceOption(removeFeatureSetParser)
+
+        addContinuousSetParser = common_cli.addSubparser(
+            subparsers, "add-continuousset",
+            "Add a continuous set to the data repo")
+        addContinuousSetParser.set_defaults(runner="addContinuousSet")
+        cls.addRepoArgument(addContinuousSetParser)
+        cls.addDatasetNameArgument(addContinuousSetParser)
+        cls.addRelativePathOption(addContinuousSetParser)
+        cls.addFilePathArgument(
+            addContinuousSetParser,
+            "The path to the file contianing the continuous data ")
+        cls.addReferenceSetNameOption(addContinuousSetParser, "continuous set")
+        cls.addClassNameOption(addContinuousSetParser, "continuous set")
+
+        removeContinuousSetParser = common_cli.addSubparser(
+            subparsers, "remove-continuousset",
+            "Remove a continuous set from the repo")
+        removeContinuousSetParser.set_defaults(runner="removeContinuousSet")
+        cls.addRepoArgument(removeContinuousSetParser)
+        cls.addDatasetNameArgument(removeContinuousSetParser)
+        cls.addContinuousSetNameArgument(removeContinuousSetParser)
+        cls.addForceOption(removeContinuousSetParser)
 
         addBiosampleParser = common_cli.addSubparser(
             subparsers, "add-biosample", "Add a Biosample to the dataset")

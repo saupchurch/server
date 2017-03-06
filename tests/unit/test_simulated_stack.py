@@ -15,6 +15,7 @@ import ga4gh.server.datamodel.reads as reads
 import ga4gh.server.datamodel.references as references
 import ga4gh.server.datamodel.variants as variants
 import ga4gh.server.datamodel.sequence_annotations as sequence_annotations
+import ga4gh.server.datamodel.continuous as continuous
 import ga4gh.server.frontend as frontend
 
 import ga4gh.schemas.protocol as protocol
@@ -195,6 +196,12 @@ class TestSimulatedStack(unittest.TestCase):
         self.assertEqual(f1.id, f2.id)
         self.assertEqual(f1.parent_id, f2.parent_id)
         self.assertEqual(f1.feature_set_id, f2.feature_set_id)
+
+    def verifyContinuousSetsEqual(self, gaContinuousSet, continuousSet):
+        dataset = continuousSet.getParentContainer()
+        self.assertEqual(gaContinuousSet.id, continuousSet.getId())
+        self.assertEqual(gaContinuousSet.dataset_id, dataset.getId())
+        self.assertEqual(gaContinuousSet.name, continuousSet.getLocalId())
 
     def verifyReferencesEqual(self, gaReference, reference):
         self.assertEqual(gaReference.id, reference.getId())
@@ -783,6 +790,34 @@ class TestSimulatedStack(unittest.TestCase):
             request.dataset_id = badId
             self.verifySearchMethodFails(request, path)
 
+    def testGetContinuousSet(self):
+        path = "/continuoussets"
+        for dataset in self.dataRepo.getDatasets():
+            for continuousSet in dataset.getContinuousSets():
+                responseObject = self.sendGetObject(
+                    path, continuousSet.getId(), protocol.ContinuousSet)
+                self.verifyContinuousSetsEqual(responseObject, continuousSet)
+            for badId in self.getBadIds():
+                continuousSet = continuous.AbstractContinuousSet(
+                    dataset, badId)
+                self.verifyGetMethodFails(path, continuousSet.getId())
+        for badId in self.getBadIds():
+            self.verifyGetMethodFails(path, badId)
+
+    def testContinuousSetsSearch(self):
+        path = '/continuoussets/search'
+        for dataset in self.dataRepo.getDatasets():
+            continuousSets = dataset.getContinuousSets()
+            request = protocol.SearchContinuousSetsRequest()
+            request.dataset_id = dataset.getId()
+            self.verifySearchMethod(
+                request, path, protocol.SearchContinuousSetsResponse,
+                continuousSets, self.verifyContinuousSetsEqual)
+        for badId in self.getBadIds():
+            request = protocol.SearchContinuousSetsRequest()
+            request.dataset_id = badId
+            self.verifySearchMethodFails(request, path)
+
     def testGetFeature(self):
         dataset = self.dataRepo.getDatasets()[0]
         featureSet = dataset.getFeatureSets()[0]
@@ -1204,6 +1239,39 @@ class TestSimulatedStack(unittest.TestCase):
                     protocol.SearchGenotypePhenotypeResponse)
                 for clientAssoc in responseData.associations:
                     self.assertEqual(clientAssoc, repoAssoc)
+
+    def testPeersList(self):
+        path = "/peers/list"
+        peers = list(self.dataRepo.getPeers(0, 10))
+        self.assertGreater(len(peers), 0)
+        request = protocol.ListPeersRequest()
+        request.page_size = 10
+        responseData = self.sendSearchRequest(
+            path, request, protocol.ListPeersResponse)
+        urls = map(lambda p: p.url, responseData.peers)
+        for peer in responseData.peers:
+            self.assertIn(peer.url, urls)
+            repoPeer = self.dataRepo.getPeer(peer.url)
+            self.assertEqual(repoPeer.getUrl(), peer.url)
+
+    def testAnnounce(self):
+        path = "/announce"
+        request = protocol.AnnouncePeerRequest()
+        request.peer.url = "http://1kgenomes.ga4gh.org"
+        responseData = self.sendSearchRequest(
+            path, request, protocol.AnnouncePeerResponse)
+        self.assertTrue(responseData.success, "A well formed URL should post")
+        request.peer.url = "Not a URL"
+        response = self.sendJsonPostRequest(path, protocol.toJson(request))
+        self.assertEqual(response.status_code, 400)
+
+    def testInfo(self):
+        path = "/info"
+        response = self.app.get(path)
+        responseData = protocol.fromJson(response.data,
+                                         protocol.GetInfoResponse)
+        self.assertIsNotNone(responseData)
+        self.assertEqual(responseData.protocol_version, protocol.version)
 
     # TODO def testSearchGenotypePhenotypes(self):
 
