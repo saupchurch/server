@@ -23,7 +23,7 @@ libraries. On Debian or Ubuntu, we can install these using
 
 .. code-block:: bash
 
-    sudo apt-get install python-dev git zlib1g-dev libxslt1-dev libffi-dev libssl-dev
+    sudo apt-get install python-dev git zlib1g-dev libxslt1-dev libffi-dev libssl-dev curl libcurl4-openssl-dev
 
 .. note::
     Instructions for configuring the reference server on Mac OS X can be found here :ref:`Installation <macosinstall>`.
@@ -298,14 +298,8 @@ use.
 Development utilities
 *********************
 
-All of the command line interface utilities have local scripts
-that simplify development: for example, we can run the local version of the
-``ga2sam`` program by using::
-
-    python ga2sam_dev.py
-
-To run the server locally in development mode, we can use the ``server_dev.py``
-script, e.g.::
+All of the command line interface utilities have local scripts that
+simplify development. To run the server locally in development mode, we can use the ``server_dev.py`` script, e.g.::
 
     python server_dev.py
 
@@ -545,7 +539,7 @@ Making a release entails the following steps:
    ``twine upload dist/ga4gh-$MAJOR.$MINOR.$PATCH.tar.gz`` (using 
    the correct file name).
 #. Verify that the documentation at
-   http://ga4gh-reference-implementation.readthedocs.org/en/stable/
+   http://ga4gh-server.readthedocs.org/en/stable/
    is for the correct version (it may take a few minutes for this to
    happen after the release has been tagged on GitHub).  The release
    notes docs should have changed, so that is a good section to look at
